@@ -65,6 +65,9 @@ public class ScheduledPollConsumerGreedyTest extends ContextTestSupport {
 
         MockScheduledPollConsumer consumer = new Mock321ScheduledPollConsumer(getMockEndpoint("mock:foo"), null);
         consumer.setGreedy(false);
+        // Prevent the background scheduler from firing during manual run() calls;
+        // the default 1s initialDelay can race with explicit polls on a slow machine.
+        consumer.setInitialDelay(60000);
 
         consumer.setPollStrategy(new PollingConsumerPollStrategy() {
             public boolean begin(Consumer consumer, Endpoint endpoint) {

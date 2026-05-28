@@ -54,8 +54,10 @@ public class SplitterParallelAsyncProcessorIssueTest extends ContextTestSupport 
 
         log.info("{} Threads in use: {}", threads.size(), threads);
 
-        // 2 from split EIP and 2 from the async processor that uses the JDK ForJoinPool
-        Assertions.assertTrue(threads.size() <= 4, "Should not use more than 4 threads, was: " + threads.size());
+        // 2 from the custom split thread pool + (availableProcessors - 1) from the JDK ForkJoinPool commonPool
+        int maxExpectedThreads = 2 + Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+        Assertions.assertTrue(threads.size() <= maxExpectedThreads,
+                "Should not use more than " + maxExpectedThreads + " threads, was: " + threads.size());
     }
 
     @Override

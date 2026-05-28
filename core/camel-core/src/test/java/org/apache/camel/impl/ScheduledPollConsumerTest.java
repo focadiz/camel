@@ -105,6 +105,10 @@ public class ScheduledPollConsumerTest extends ContextTestSupport {
 
         consumer.setUseFixedDelay(true);
         consumer.setDelay(60000);
+        // Prevent the background scheduler from firing during the inline retry loop;
+        // the default 1s initialDelay can trigger an extra poll on a slow machine
+        // after the retries have already completed.
+        consumer.setInitialDelay(60000);
         consumer.start();
         // poll that throws an exception
         consumer.run();
