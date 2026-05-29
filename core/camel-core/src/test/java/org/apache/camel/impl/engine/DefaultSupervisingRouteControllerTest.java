@@ -176,6 +176,12 @@ public class DefaultSupervisingRouteControllerTest extends ContextTestSupport {
 
         MockEndpoint.assertIsSatisfied(10, TimeUnit.SECONDS, mock, mock2, mock3, mock4);
 
+        // wait for the supervising controller to finish restarting the jms routes
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertEquals("Started", context.getRouteController().getRouteStatus("cheese").toString());
+            assertEquals("Started", context.getRouteController().getRouteStatus("cake").toString());
+        });
+
         // these should all start
         assertEquals("Started", context.getRouteController().getRouteStatus("foo").toString());
         assertEquals("Started", context.getRouteController().getRouteStatus("cheese").toString());

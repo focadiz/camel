@@ -232,6 +232,7 @@ public final class ClusteredRoutePolicy extends RoutePolicySupport implements Ca
     }
 
     private void releaseClusterView() {
+        boolean wasLeader;
         lock.lock();
         try {
             // Remove event listener
@@ -243,14 +244,18 @@ public final class ClusteredRoutePolicy extends RoutePolicySupport implements Ca
                 clusterView.getClusterService().releaseView(clusterView);
                 clusterView = null;
             }
+            wasLeader = leader.getAndSet(false);
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            try {
-                setLeader(false);
-            } finally {
-                lock.unlock();
-            }
+            lock.unlock();
+        }
+        // Stop managed routes outside the lock to prevent deadlock with ChildServiceSupport
+        // locks acquired during route start/stop (lock ordering: ClusteredRoutePolicy.lock
+        // must never be held while acquiring ChildServiceSupport locks).
+        if (wasLeader) {
+            LOG.debug("Leadership lost");
+            stopManagedRoutes();
         }
     }
 
@@ -264,17 +269,26 @@ public final class ClusteredRoutePolicy extends RoutePolicySupport implements Ca
     // ****************************************************
 
     private void setLeader(boolean isLeader) {
+        boolean shouldStart = false;
+        boolean shouldStop = false;
         lock.lock();
         try {
-            if (isLeader && leader.compareAndSet(false, isLeader)) {
+            if (isLeader && leader.compareAndSet(false, true)) {
                 LOG.debug("Leadership taken");
-                startManagedRoutes();
-            } else if (!isLeader && leader.getAndSet(isLeader)) {
+                shouldStart = true;
+            } else if (!isLeader && leader.getAndSet(false)) {
                 LOG.debug("Leadership lost");
-                stopManagedRoutes();
+                shouldStop = true;
             }
         } finally {
             lock.unlock();
+        }
+        // Perform route management outside the lock to prevent deadlock with
+        // ChildServiceSupport locks acquired during route start/stop.
+        if (shouldStart) {
+            startManagedRoutes();
+        } else if (shouldStop) {
+            stopManagedRoutes();
         }
     }
 

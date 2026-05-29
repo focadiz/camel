@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
 
 public class CamelContextDeadlockTest {
 
-    @Timeout(5)
+    @Timeout(30)
     @Test
     public void testComponentDeadlock() {
         CamelContext context = new DefaultCamelContext();

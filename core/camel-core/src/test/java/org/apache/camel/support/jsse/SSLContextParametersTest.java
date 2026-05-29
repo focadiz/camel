@@ -988,10 +988,14 @@ public class SSLContextParametersTest extends AbstractJsseParametersTest {
     @Test
     @EnabledForJreRange(min = JRE.JAVA_21)
     public void testSignatureSchemesFilter() throws Exception {
-        // Note: SSLParameters.getSignatureSchemes() returns null by default (unlike getNamedGroups()),
-        // so filters operate on explicitly provided schemes rather than JDK defaults.
+        // JDK 21-24: SSLParameters.getSignatureSchemes() returns null by default (unlike getNamedGroups()).
+        // JDK 26+: SSLParameters.getSignatureSchemes() returns the full list of supported schemes.
+        // Capture JDK defaults to assert correct behavior across JDK versions.
+        SSLContext controlContext = SSLContext.getInstance("TLSv1.3");
+        controlContext.init(null, null, null);
+        String[] jdkDefaultSignatureSchemes = getSignatureSchemes(controlContext.createSSLEngine().getSSLParameters());
 
-        // default - no filter, keeps defaults (null)
+        // default - no filter, Camel preserves JDK defaults unchanged
         SSLContextParameters scp = new SSLContextParameters();
         SSLContext context = scp.createSSLContext(null);
 
@@ -999,9 +1003,9 @@ public class SSLContextParametersTest extends AbstractJsseParametersTest {
         SSLSocket socket = (SSLSocket) context.getSocketFactory().createSocket();
         SSLServerSocket serverSocket = (SSLServerSocket) context.getServerSocketFactory().createServerSocket();
 
-        assertNull(getSignatureSchemes(engine.getSSLParameters()));
-        assertNull(getSignatureSchemes(socket.getSSLParameters()));
-        assertNull(getSignatureSchemes(serverSocket.getSSLParameters()));
+        assertArrayEquals(jdkDefaultSignatureSchemes, getSignatureSchemes(engine.getSSLParameters()));
+        assertArrayEquals(jdkDefaultSignatureSchemes, getSignatureSchemes(socket.getSSLParameters()));
+        assertArrayEquals(jdkDefaultSignatureSchemes, getSignatureSchemes(serverSocket.getSSLParameters()));
 
         // empty filter - no includes means no schemes match (empty array)
         FilterParameters filter = new FilterParameters();
@@ -1032,7 +1036,7 @@ public class SSLContextParametersTest extends AbstractJsseParametersTest {
         // explicit schemes take precedence over filter
         assertEquals(4, getSignatureSchemes(engine.getSSLParameters()).length);
 
-        // clear explicit schemes, keep filter - now filter applies to empty JDK defaults
+        // clear explicit schemes, keep filter - now filter applies to JDK defaults
         scp.setSignatureSchemes(null);
         filter.getInclude().clear();
         filter.getInclude().add(".*");
@@ -1041,10 +1045,12 @@ public class SSLContextParametersTest extends AbstractJsseParametersTest {
         socket = (SSLSocket) context.getSocketFactory().createSocket();
         serverSocket = (SSLServerSocket) context.getServerSocketFactory().createServerSocket();
 
-        // JDK defaults are null → filtering null gives empty array
-        assertEquals(0, getSignatureSchemes(engine.getSSLParameters()).length);
-        assertEquals(0, getSignatureSchemes(socket.getSSLParameters()).length);
-        assertEquals(0, getSignatureSchemes(serverSocket.getSSLParameters()).length);
+        // JDK 21-24: defaults are null → filtering null gives empty array
+        // JDK 26+: defaults are non-null → filtering ".*" keeps all JDK-provided schemes
+        int expectedCount = jdkDefaultSignatureSchemes == null ? 0 : jdkDefaultSignatureSchemes.length;
+        assertEquals(expectedCount, getSignatureSchemes(engine.getSSLParameters()).length);
+        assertEquals(expectedCount, getSignatureSchemes(socket.getSSLParameters()).length);
+        assertEquals(expectedCount, getSignatureSchemes(serverSocket.getSSLParameters()).length);
     }
 
     @Test

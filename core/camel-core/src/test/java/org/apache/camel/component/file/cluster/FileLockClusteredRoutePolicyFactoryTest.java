@@ -71,7 +71,7 @@ public final class FileLockClusteredRoutePolicyFactoryTest {
             SCHEDULER.submit(() -> run(id));
         }
 
-        LATCH.await(20, TimeUnit.SECONDS);
+        LATCH.await(60, TimeUnit.SECONDS);
         List<Runnable> waitingTasks = SCHEDULER.shutdownNow();
         assertEquals(0, waitingTasks.size(), "All scheduled tasks should have been completed!");
 
@@ -115,7 +115,7 @@ public final class FileLockClusteredRoutePolicyFactoryTest {
 
             context.start();
 
-            contextLatch.await(10, TimeUnit.SECONDS);
+            contextLatch.await(20, TimeUnit.SECONDS);
 
             LOGGER.debug("Shutting down node {}", id);
             RESULTS.add(id);

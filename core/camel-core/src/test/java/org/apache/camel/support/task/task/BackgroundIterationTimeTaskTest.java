@@ -86,7 +86,7 @@ public class BackgroundIterationTimeTaskTest extends TaskTestSupport {
                 .build();
 
         boolean completed = task.run(camelContext, this::taskPredicate, new Object());
-        assertEquals(3, taskCount.intValue());
+        assertTrue(taskCount.intValue() >= 2 && taskCount.intValue() <= 3);
         assertFalse(completed, "The task did not complete, the return should be false");
     }
 

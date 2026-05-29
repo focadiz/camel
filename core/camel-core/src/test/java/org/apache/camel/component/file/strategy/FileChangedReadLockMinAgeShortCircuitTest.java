@@ -45,8 +45,8 @@ public class FileChangedReadLockMinAgeShortCircuitTest extends ContextTestSuppor
         // terminate test quicker
         context.getShutdownStrategy().setTimeout(1);
 
-        // we do not acquire read-lock because the check interval is 10s, so "changed" requires at least a poll of 10s
-        // before we can determine that the file has same size as before
+        // we do not acquire read-lock because readLockMinAge=60000ms is not reached within the 2s test window:
+        // the file was just created so it is much younger than 60 seconds regardless of hardware speed.
 
         MockEndpoint mock = getMockEndpoint("mock:result");
         mock.expectedMessageCount(0);
@@ -61,7 +61,7 @@ public class FileChangedReadLockMinAgeShortCircuitTest extends ContextTestSuppor
             @Override
             public void configure() {
                 from(fileUri(
-                        "in?initialDelay=500&delay=10&readLock=changed&readLockMinAge=1000&readLockCheckInterval=10000&readLockTimeout=20000"))
+                        "in?initialDelay=500&delay=10&readLock=changed&readLockMinAge=60000&readLockCheckInterval=10000&readLockTimeout=20000"))
                         .to(fileUri("out"), "mock:result");
             }
         };

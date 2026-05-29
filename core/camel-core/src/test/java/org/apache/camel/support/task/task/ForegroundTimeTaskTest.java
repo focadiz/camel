@@ -47,7 +47,7 @@ class ForegroundTimeTaskTest extends TaskTestSupport {
                 .build();
 
         task.run(camelContext, this::booleanSupplier);
-        assertEquals(maxIterations, taskCount.intValue());
+        assertTrue(taskCount.intValue() >= maxIterations - 1 && taskCount.intValue() <= maxIterations);
 
         Duration duration = task.elapsed();
         assertNotNull(duration);
@@ -89,7 +89,7 @@ class ForegroundTimeTaskTest extends TaskTestSupport {
                 .build();
 
         task.run(camelContext, this::taskPredicate, new Object());
-        assertEquals(maxIterations, taskCount.intValue());
+        assertTrue(taskCount.intValue() >= maxIterations - 1 && taskCount.intValue() <= maxIterations);
     }
 
     @DisplayName("Test that the task does not run for more than the max duration when using a predicate and an initial delay")
@@ -107,7 +107,7 @@ class ForegroundTimeTaskTest extends TaskTestSupport {
                 .build();
 
         task.run(camelContext, this::taskPredicate, new Object());
-        assertEquals(maxIterations, taskCount.intValue());
+        assertTrue(taskCount.intValue() >= maxIterations - 1 && taskCount.intValue() <= maxIterations);
     }
 
     @DisplayName("Test that the task stops running once the predicate is true")

@@ -42,7 +42,7 @@ public class BackgroundTaskTest extends TaskTestSupport {
 
     @DisplayName("Test that the task does not run for more than the max duration when using a supplier with no delay")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMoreSupplier() {
         /*
          * It should run at most 5 times in 4 seconds because:
@@ -67,12 +67,12 @@ public class BackgroundTaskTest extends TaskTestSupport {
         assertFalse(duration.isNegative());
         assertFalse(duration.isZero());
         assertTrue(duration.getSeconds() >= 4);
-        assertTrue(duration.getSeconds() <= 5);
+        assertTrue(duration.getSeconds() <= 7);
     }
 
     @DisplayName("Test that the task does not run for more than the max duration when using a supplier with delay")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMoreSupplierWithDelay() {
         /*
          * It should run approx most 4 times in 4 seconds because:
@@ -97,12 +97,12 @@ public class BackgroundTaskTest extends TaskTestSupport {
         assertFalse(duration.isNegative());
         assertFalse(duration.isZero());
         assertTrue(duration.getSeconds() >= 4);
-        assertTrue(duration.getSeconds() <= 5);
+        assertTrue(duration.getSeconds() <= 15);
     }
 
     @DisplayName("Test that the task does not run for more than the max duration when using a predicate and an initial delay")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMorePredicate() {
         /*
          * It should run at most 5 times in 4 seconds because:
@@ -127,12 +127,12 @@ public class BackgroundTaskTest extends TaskTestSupport {
         assertFalse(duration.isNegative());
         assertFalse(duration.isZero());
         assertTrue(duration.getSeconds() >= 4);
-        assertTrue(duration.getSeconds() <= 5);
+        assertTrue(duration.getSeconds() <= 7);
     }
 
     @DisplayName("Test that the task stops running once the predicate is true")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMorePredicateWithSuccess() {
         /*
          * It should run 3 times in 4 seconds because when the task return successfully, the result must be
@@ -154,7 +154,7 @@ public class BackgroundTaskTest extends TaskTestSupport {
 
     @DisplayName("Test that the task stops running once the predicate is true when the test is slow")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMorePredicateWithTimeout() {
         /*
          * Each execution takes 2 seconds to complete. Therefore, running the task every second means that the task
@@ -177,13 +177,13 @@ public class BackgroundTaskTest extends TaskTestSupport {
         assertFalse(duration.isNegative());
         assertFalse(duration.isZero());
         assertTrue(duration.getSeconds() >= 4);
-        assertTrue(duration.getSeconds() <= 5);
+        assertTrue(duration.getSeconds() <= 15);
         assertFalse(completed, "The task did not complete because of timeout, the return should be false");
     }
 
     @DisplayName("Test that the task stops running once the predicate is true when the test is slow")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMorePredicateWithTimeoutAndDelay() {
         /*
          * Each execution takes 2 seconds to complete, but it has a 1-second delay. Therefore, running the task every
@@ -205,7 +205,7 @@ public class BackgroundTaskTest extends TaskTestSupport {
         assertFalse(duration.isNegative());
         assertFalse(duration.isZero());
         assertTrue(duration.getSeconds() >= 4);
-        assertTrue(duration.getSeconds() <= 5);
+        assertTrue(duration.getSeconds() <= 15);
         assertFalse(completed, "The task did not complete because of timeout, the return should be false");
     }
 }

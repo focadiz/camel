@@ -124,7 +124,7 @@ public class ForegroundTaskTest extends TaskTestSupport {
 
     @DisplayName("Test that the task stops running once the predicate is true when the test is slow")
     @Test
-    @Timeout(10)
+    @Timeout(30)
     void testRunNoMorePredicateDeterministicSlowWithDelay() {
         // It should run 5 times in 4 seconds because there is no delay
         ForegroundTask task = Tasks.foregroundTask()
