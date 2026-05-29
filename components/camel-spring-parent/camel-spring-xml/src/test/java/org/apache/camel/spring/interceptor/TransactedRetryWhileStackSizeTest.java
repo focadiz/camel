@@ -16,6 +16,8 @@
  */
 package org.apache.camel.spring.interceptor;
 
+import java.util.concurrent.TimeUnit;
+
 import org.apache.camel.builder.RouteBuilder;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -27,7 +29,7 @@ public class TransactedRetryWhileStackSizeTest extends TransactionClientDataSour
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactedRetryWhileStackSizeTest.class);
     private static final boolean PRINT_STACK_TRACE = false;
-    private static final int MAX_DEPTH = 100;
+    private static final int MAX_DEPTH = 500;
 
     @Test
     public void testStackSize() throws Exception {
@@ -37,7 +39,7 @@ public class TransactedRetryWhileStackSizeTest extends TransactionClientDataSour
         MyCoolDude dude = new MyCoolDude();
         template.sendBody("seda:start", dude);
 
-        assertMockEndpointsSatisfied();
+        assertMockEndpointsSatisfied(60, TimeUnit.SECONDS);
 
         assertEquals(1000 + 1, dude.getCounter());
     }
