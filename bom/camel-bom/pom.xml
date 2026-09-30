@@ -2169,6 +2169,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.camel</groupId>
+        <artifactId>camel-semantic</artifactId>
+        <version>4.23.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.camel</groupId>
         <artifactId>camel-servicenow</artifactId>
         <version>4.23.0-SNAPSHOT</version>
       </dependency>
@@ -2495,6 +2500,11 @@
       <dependency>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-twitter</artifactId>
+        <version>4.23.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.camel</groupId>
+        <artifactId>camel-typesafe-ai</artifactId>
         <version>4.23.0-SNAPSHOT</version>
       </dependency>
       <dependency>

@@ -91,7 +91,9 @@ public abstract class LanguageSupport implements Language, IsSingleton, CamelCon
      * Does the expression refer to a dynamic resource which uses simple functions.
      */
     protected boolean isDynamicResource(String expression) {
-        return expression.startsWith(ResourceHelper.RESOURCE) && hasSimpleFunction(expression);
+        // the same test as the loader (ScriptHelper.hasExternalScript): a resource: text without a scheme is not a
+        // resource, and treating it as one made Simple recurse into itself (CAMEL-24885)
+        return ScriptHelper.hasExternalScript(expression) && hasSimpleFunction(expression);
     }
 
     /**
@@ -152,8 +154,10 @@ public abstract class LanguageSupport implements Language, IsSingleton, CamelCon
                 try {
                     long num = TimeUtils.toMilliSeconds(text);
                     if (type == int.class || type == Integer.class) {
-                        // need to cast to int
-                        obj = (int) num;
+                        // need to cast to int (if the value fits)
+                        if (num >= Integer.MIN_VALUE && num <= Integer.MAX_VALUE) {
+                            obj = (int) num;
+                        }
                     } else {
                         obj = num;
                     }

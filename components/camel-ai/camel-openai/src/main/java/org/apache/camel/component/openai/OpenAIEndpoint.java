@@ -73,15 +73,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * OpenAI endpoint for chat completion, Responses API, embeddings, audio transcription, audio translation, and
- * text-to-speech.
+ * LLM endpoint for chat completion, Responses API, embeddings, audio transcription, audio translation, and
+ * text-to-speech using OpenAI-compatible APIs. The {@code openai} scheme is a supported alias.
  */
 @UriEndpoint(firstVersion = "4.17.0",
-             scheme = "openai",
-             title = "OpenAI",
+             scheme = "openai,llm",
+             title = "OpenAI,LLM",
              syntax = "openai:operation",
              category = { Category.AI },
-             producerOnly = true,
              headersClass = OpenAIConstants.class)
 public class OpenAIEndpoint extends DefaultEndpoint {
 
@@ -92,7 +91,8 @@ public class OpenAIEndpoint extends DefaultEndpoint {
               description = "The operation to perform: 'chat-completion', 'responses', 'responses-retrieve', "
                             + "'responses-cancel', 'batch', 'batch-retrieve', 'batch-cancel', 'batch-results', "
                             + "'embeddings', 'tool-execution', 'audio-transcription', "
-                            + "'audio-translation', 'audio-speech', 'moderation', 'image-generation', or 'image-edit'")
+                            + "'audio-translation', 'audio-speech', 'moderation', 'image-generation', "
+                            + "'image-edit', or 'webhook' (a consumer)")
     private OpenAIOperations operation;
 
     @UriParam
@@ -143,12 +143,29 @@ public class OpenAIEndpoint extends DefaultEndpoint {
             case moderation -> new OpenAIModerationProducer(this);
             case imageGeneration -> new OpenAIImageGenerationProducer(this);
             case imageEdit -> new OpenAIImageEditProducer(this);
+            case webhook -> throw new IllegalArgumentException(
+                    "The webhook operation receives events, so it is used in a from(), not in a to()");
         };
     }
 
     @Override
     public Consumer createConsumer(Processor processor) throws Exception {
-        throw new UnsupportedOperationException("Consumer not supported for OpenAI component");
+        if (operation != OpenAIOperations.webhook) {
+            throw new UnsupportedOperationException(
+                    "Only the webhook operation can be consumed from; " + operation + " sends to OpenAI, so it is used"
+                                                    + " in a to()");
+        }
+        Consumer consumer = new OpenAIWebhookConsumer(this, processor);
+        configureConsumer(consumer);
+        return consumer;
+    }
+
+    /**
+     * Applies the consumer configuration of this endpoint to the HTTP consumer the webhook operation registers with the
+     * REST consumer factory.
+     */
+    void configureNestedConsumer(Consumer consumer) throws Exception {
+        configureConsumer(consumer);
     }
 
     @Override
@@ -159,7 +176,10 @@ public class OpenAIEndpoint extends DefaultEndpoint {
             OpenAIBatchSupport.validateConfiguration(configuration);
         }
         mcpStopped = false;
-        client = createClient();
+        if (operation != OpenAIOperations.webhook) {
+            // the webhook consumer verifies signatures with a client of its own and needs no API key
+            client = createClient();
+        }
         registerRouteToolRegistryListener();
         initializeMcpServers();
         refreshRouteTools();

@@ -334,6 +334,7 @@
     </build>
 
     <profiles>
+
         <profile>
             <id>sync-example-catalog</id>
             <build>

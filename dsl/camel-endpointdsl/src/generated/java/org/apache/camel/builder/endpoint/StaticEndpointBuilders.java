@@ -11233,6 +11233,36 @@ public class StaticEndpointBuilders {
         return LdifEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
+     * LLM (camel-openai)
+     * LLM endpoint for chat completion, Responses API, embeddings, audio
+     * transcription, audio translation, and text-to-speech using
+     * OpenAI-compatible APIs. The openai scheme is a supported alias.
+     * 
+     * Category: ai
+     * Since: 4.17
+     * Maven coordinates: org.apache.camel:camel-openai
+     * 
+     * Syntax: <code>llm:operation</code>
+     * 
+     * Path parameter: operation (required)
+     * The operation to perform: 'chat-completion', 'responses',
+     * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
+     * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
+     * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
+     * 'image-generation', 'image-edit', or 'webhook' (a consumer)
+     * There are 17 enums and the value can be one of: chat-completion,
+     * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
+     * batch-cancel, batch-results, embeddings, tool-execution,
+     * audio-transcription, audio-translation, audio-speech, moderation,
+     * image-generation, image-edit, webhook
+     * 
+     * @param path operation
+     * @return the dsl builder
+     */
+    public static OpenAIEndpointBuilderFactory.OpenAIEndpointBuilder llm(String path) {
+        return openai("llm", path);
+    }
+    /**
      * Log Data (camel-log)
      * Prints data from the routed message (such as body and headers) to the
      * logger.
@@ -12728,8 +12758,9 @@ public class StaticEndpointBuilders {
     }
     /**
      * OpenAI (camel-openai)
-     * OpenAI endpoint for chat completion, Responses API, embeddings, audio
-     * transcription, audio translation, and text-to-speech.
+     * LLM endpoint for chat completion, Responses API, embeddings, audio
+     * transcription, audio translation, and text-to-speech using
+     * OpenAI-compatible APIs. The openai scheme is a supported alias.
      * 
      * Category: ai
      * Since: 4.17
@@ -12742,12 +12773,12 @@ public class StaticEndpointBuilders {
      * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
      * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
      * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
-     * 'image-generation', or 'image-edit'
-     * There are 16 enums and the value can be one of: chat-completion,
+     * 'image-generation', 'image-edit', or 'webhook' (a consumer)
+     * There are 17 enums and the value can be one of: chat-completion,
      * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
      * batch-cancel, batch-results, embeddings, tool-execution,
      * audio-transcription, audio-translation, audio-speech, moderation,
-     * image-generation, image-edit
+     * image-generation, image-edit, webhook
      * 
      * @param path operation
      * @return the dsl builder
@@ -12757,8 +12788,9 @@ public class StaticEndpointBuilders {
     }
     /**
      * OpenAI (camel-openai)
-     * OpenAI endpoint for chat completion, Responses API, embeddings, audio
-     * transcription, audio translation, and text-to-speech.
+     * LLM endpoint for chat completion, Responses API, embeddings, audio
+     * transcription, audio translation, and text-to-speech using
+     * OpenAI-compatible APIs. The openai scheme is a supported alias.
      * 
      * Category: ai
      * Since: 4.17
@@ -12771,12 +12803,12 @@ public class StaticEndpointBuilders {
      * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
      * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
      * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
-     * 'image-generation', or 'image-edit'
-     * There are 16 enums and the value can be one of: chat-completion,
+     * 'image-generation', 'image-edit', or 'webhook' (a consumer)
+     * There are 17 enums and the value can be one of: chat-completion,
      * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
      * batch-cancel, batch-results, embeddings, tool-execution,
      * audio-transcription, audio-translation, audio-speech, moderation,
-     * image-generation, image-edit
+     * image-generation, image-edit, webhook
      * 
      * @param componentName to use a custom component name for the endpoint
      * instead of the default name
@@ -17150,6 +17182,46 @@ public class StaticEndpointBuilders {
      */
     public static TwitterTimelineEndpointBuilderFactory.TwitterTimelineEndpointBuilder twitterTimeline(String componentName, String path) {
         return TwitterTimelineEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
+     * TypeSafe AI (camel-typesafe-ai)
+     * Evaluate text and structured state with the TypeSafe AI decision API.
+     * 
+     * Category: ai
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-typesafe-ai
+     * 
+     * Syntax: <code>typesafe-ai:name</code>
+     * 
+     * Path parameter: name (required)
+     * A logical name for the evaluation endpoint.
+     * 
+     * @param path name
+     * @return the dsl builder
+     */
+    public static TypeSafeAiEndpointBuilderFactory.TypeSafeAiEndpointBuilder typesafeAi(String path) {
+        return typesafeAi("typesafe-ai", path);
+    }
+    /**
+     * TypeSafe AI (camel-typesafe-ai)
+     * Evaluate text and structured state with the TypeSafe AI decision API.
+     * 
+     * Category: ai
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-typesafe-ai
+     * 
+     * Syntax: <code>typesafe-ai:name</code>
+     * 
+     * Path parameter: name (required)
+     * A logical name for the evaluation endpoint.
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path name
+     * @return the dsl builder
+     */
+    public static TypeSafeAiEndpointBuilderFactory.TypeSafeAiEndpointBuilder typesafeAi(String componentName, String path) {
+        return TypeSafeAiEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
      * Undertow (camel-undertow)

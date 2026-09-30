@@ -116,6 +116,16 @@ final class SchemaHints {
 
     private static final Predicate<Match> ANY = m -> true;
 
+    /** The EIP names a model writes for the exchange properties, and the ones Camel has. */
+    private static final Map<String, String> EXCHANGE_PROPERTY_EIPS = Map.of(
+            "setExchangeProperty", "setProperty", "setExchangeProperties", "setProperties",
+            "removeExchangeProperty", "removeProperty", "removeExchangeProperties", "removeProperties",
+            "setExchangeVariable", "setVariable", "setExchangeVariables", "setVariables");
+
+    private static final Set<String> ROUTE_ERROR_HANDLER_KINDS
+            = Set.of("noErrorHandler", "deadLetterChannel", "defaultErrorHandler", "springTransactionErrorHandler",
+                    "jtaTransactionErrorHandler", "refErrorHandler");
+
     /**
      * Applies a table to the errors: the first matching row rewrites each error. Two rewrites that say the same at the
      * same location (the branches of an anyOf, once the hint no longer names the branch) are reported once.
@@ -226,6 +236,27 @@ final class SchemaHints {
                         return eip + " holds its EIPs under steps: " + eip + ": {steps: [- log: \"...\"]}"
                                + (eip.equals("doCatch") ? ", each - doCatch: item with exception: and steps:" : "");
                     }),
+            // setBody: {constant: null} to clear the body before a GET: constant is a text (CAMEL-24888)
+            append("type", ".*/constant(/expression)?", m -> m.message().contains("null found"),
+                    m -> "constant is a text; to set an empty body (a GET sends none) write setBody: {simple:"
+                         + " {expression: \"${null}\"}}"),
+            // library: jackson: the enumeration is case sensitive; the name to write is the entry of this data
+            // format's enumeration (json, avro, protobuf, yaml each have their own) that matches ignoring case
+            append("enum", ".*/library", ANY,
+                    m -> {
+                        JsonNode instance = m.error().getInstanceNode();
+                        String written = instance != null && instance.isValueNode() ? instance.asText() : "";
+                        String list = between(m.message(), "[", "]");
+                        String match = null;
+                        for (String entry : (list == null ? "" : list).split(",")) {
+                            String name = entry.trim().replace("\"", "");
+                            if (!name.isEmpty() && name.equalsIgnoreCase(written)) {
+                                match = name;
+                            }
+                        }
+                        return "the library name is case sensitive"
+                               + (match != null ? ": write library: " + match : ", write it as listed");
+                    }),
             append("type", "/?", m -> m.message().contains("array expected"),
                     m -> "a Camel YAML file is a list of entries, each starting with \"- \": - route:, - from:, - beans:,"
                          + " - rest:, - onException:"),
@@ -273,6 +304,20 @@ final class SchemaHints {
                             && m.location().chars().filter(c -> c == '/').count() >= 2,
                     m -> "'" + m.unknown() + "' is a top-level entry: write it as a list item at the same level as the"
                          + " route, not inside it"),
+            // route: {noErrorHandler: true} or errorHandlerType: none: the route-level error handler is errorHandler: with
+            // the kind as its key (CAMEL-24881)
+            unknownProperty(".*/(route|from)", m -> ROUTE_ERROR_HANDLER_KINDS.contains(m.unknown())
+                    || m.unknown().equals("errorHandlerType") || m.unknown().equals("errorHandlerRef"),
+                    m -> "a route-level error handler is written under the route as errorHandler: with the kind as its"
+                         + " key: errorHandler: {noErrorHandler: {}}, errorHandler: {deadLetterChannel: {deadLetterUri:"
+                         + " \"direct:parked\"}}, errorHandler: {defaultErrorHandler: {redeliveryPolicy: {...}}}"
+                         + " (a top-level - errorHandler: item applies to every route)"),
+            unknownProperty(".*/errorHandler", m -> m.unknown().equals("type") || m.unknown().equals("errorHandlerType"),
+                    m -> "errorHandler: has the kind of handler as its key, not a " + m.unknown() + " property:"
+                         + " errorHandler: {noErrorHandler: {}}, {deadLetterChannel: {deadLetterUri: \"...\"}} or"
+                         + " {defaultErrorHandler: {...}}"),
+            append("type", ".*/errorHandler/noErrorHandler", m -> m.message().contains("object expected"),
+                    m -> "noErrorHandler takes no options: write noErrorHandler: {}"),
             // onException: {java.lang.Exception: ...}: the class is a list item under exception:
             unknownProperty(".*/(onException|doCatch/\\d+)", m -> CLASS_NAME.matcher(m.unknown()).matches(),
                     m -> "the exception class is a list item under exception: ("
@@ -366,6 +411,17 @@ final class SchemaHints {
                     m -> "step is the Step EIP, a named group: its EIPs go in its steps: list (step: {id: ..., steps: [-"
                          + " setHeader: ...]})",
                     "additionalProperties", "additionalProperties"),
+            // CAMEL-24888 (the HTTP rungs of the examples ladder): the shapes a model writes for the EIPs of a REST app
+            unknownProperty(null, m -> EXCHANGE_PROPERTY_EIPS.containsKey(m.unknown()),
+                    m -> "the EIP is " + EXCHANGE_PROPERTY_EIPS.get(m.unknown()) + ": write - "
+                         + EXCHANGE_PROPERTY_EIPS.get(m.unknown()) + ": {name: ..., expression: {simple: {expression:"
+                         + " \"...\"}}} (an exchange property is read back as ${exchangeProperty.name})"),
+            unknownProperty(".*/toD", m -> m.unknown().equals("options") || m.unknown().equals("params"),
+                    m -> "toD takes its options like to: under parameters: (toD: {uri: \"http://...\", parameters:"
+                         + " {throwExceptionOnFailure: false}}), or in the uri after ?"),
+            unknownProperty(".*/jsonpath", m -> m.unknown().equalsIgnoreCase("jsonPath") || m.unknown().equals("path"),
+                    m -> "the JSONPath text goes under expression: (jsonpath: {expression: \"$[?(@.sku == 'X')]\","
+                         + " resultType: java.util.List})"),
             unknownProperty(null,
                     m -> YamlValidator.closest(m.unknown(), m.validator().knownProperties(m.schemaLocation())) != null,
                     m -> "did you mean '"

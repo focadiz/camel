@@ -2,11 +2,11 @@
 :doctitle: OpenAI
 :shortname: openai
 :artifactid: camel-openai
-:description: OpenAI endpoint for chat completion, Responses API, embeddings, audio transcription, audio translation, and text-to-speech.
+:description: LLM endpoint for chat completion, Responses API, embeddings, audio transcription, audio translation, and text-to-speech using OpenAI-compatible APIs. The openai scheme is a supported alias.
 :since: 4.17
 :supportlevel: Stable
 :tabs-sync-option:
-:component-header: Only producer is supported
+:component-header: Both producer and consumer are supported
 //Manually maintained attributes
 :group: AI
 
@@ -14,7 +14,9 @@
 
 *{component-header}*
 
-The OpenAI component provides integration with OpenAI and OpenAI-compatible APIs for chat completion, text embeddings, content moderation, audio transcription, audio translation, text-to-speech, and image generation and editing using the official openai-java SDK.
+The LLM component provides integration with OpenAI and OpenAI-compatible APIs (Ollama, vLLM, LM Studio, OpenRouter, Azure OpenAI, and others) for chat completion, text embeddings, content moderation, audio transcription, audio translation, text-to-speech, and image generation and editing using the official openai-java SDK.
+
+The Maven artifact remains `camel-openai`. Routes may use either the `llm:` or the `openai:` scheme.
 
 Maven users will need to add the following dependency to their `pom.xml` for this component:
 
@@ -32,8 +34,12 @@ Maven users will need to add the following dependency to their `pom.xml` for thi
 
 [source]
 ----
-openai:operation[?options]
+llm:operation[?options]
 ----
+
+The `openai:` scheme is a supported alias (`openai:operation[?options]`) for existing routes.
+
+TIP: Prefer `llm:` in new routes for discoverability. Examples below use `openai:` for backward compatibility; substitute `llm:` in the operation URI when starting a new integration.
 
 Supported operations:
 
@@ -58,6 +64,8 @@ See xref:others:openai-batch.adoc[Batch API operations] for usage (building the 
 * `moderation` - Check text or an image against the OpenAI usage policies before it reaches a model
 * `image-generation` - Generate images from a text prompt (e.g., gpt-image-1, gpt-image-1-mini)
 * `image-edit` - Edit an existing image, optionally through a mask, from a text prompt
+* `webhook` - Receive the events OpenAI sends when a background response, a batch or a job finishes. It is a
+consumer: it is used in a `from`, see xref:others:openai-webhooks.adoc[Webhook Events]
 
 // component options: START
 include::partial$component-configure-options.adoc[]
@@ -1321,6 +1329,7 @@ For more details on specific features, see:
 * xref:others:openai-mcp.adoc[MCP Tool Calling] - Model Context Protocol server configuration, agentic loop, streaming, and connection recovery
 * xref:others:openai-providers.adoc[OpenAI-Compatible Providers] - Using Ollama, LM Studio, vLLM, and OpenRouter as alternative backends
 * xref:others:openai-operations.adoc[Embeddings, Moderation, Audio and Image Operations] - Text embeddings, vector database integration, content moderation, audio transcription, and image generation
+* xref:others:openai-webhooks.adoc[Webhook Events] - Receiving the events OpenAI sends when a background response, a batch or a job finishes
 
 == Error Handling
 
