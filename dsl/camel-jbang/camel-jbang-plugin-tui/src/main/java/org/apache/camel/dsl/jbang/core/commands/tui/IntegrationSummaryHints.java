@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -42,14 +43,15 @@ final class IntegrationSummaryHints {
     private static final long RECHECK_MS = 3000;
     private static final long MODE_RECHECK_MS = 2000;
 
-    private record Entry(long checkedAt, long modified, Map<String, String> descriptions, Map<String, Note> notes) {
+    private record Entry(long checkedAt, long modified, Map<String, String> descriptions, Map<String, Note> notes,
+            List<IntegrationSummary.StepLabel> steps) {
     }
 
     /** A route's note: the longer explanation beside its short description, from the AI or from the source. */
     record Note(String text, boolean ai) {
     }
 
-    private static final Entry EMPTY = new Entry(0, 0, Map.of(), Map.of());
+    private static final Entry EMPTY = new Entry(0, 0, Map.of(), Map.of(), List.of());
 
     private static final Map<Path, Entry> CACHE = new ConcurrentHashMap<>();
     private static volatile long modeCheckedAt;
@@ -65,7 +67,9 @@ final class IntegrationSummaryHints {
         if (dir == null || routeId == null || !enabled()) {
             return null;
         }
-        return entry(dir.toAbsolutePath().normalize()).descriptions().get(routeId);
+        Map<String, String> descriptions = entry(dir.toAbsolutePath().normalize()).descriptions();
+        String d = descriptions.get(routeId);
+        return d != null ? d : descriptions.get(RouteKeys.sourceKey(dir, routeId));
     }
 
     /** The AI descriptions of a project by route id; empty when there are none or the hints are off. */
@@ -73,7 +77,20 @@ final class IntegrationSummaryHints {
         if (dir == null || !enabled()) {
             return Map.of();
         }
-        return entry(dir.toAbsolutePath().normalize()).descriptions();
+        Map<String, String> descriptions = entry(dir.toAbsolutePath().normalize()).descriptions();
+        Map<String, String> running = RouteKeys.runningIds(dir);
+        if (running.isEmpty()) {
+            return descriptions;
+        }
+        // also under the running id of a source route without one, as the topology names it
+        Map<String, String> answer = new HashMap<>(descriptions);
+        running.forEach((source, id) -> {
+            String d = descriptions.get(source);
+            if (d != null) {
+                answer.putIfAbsent(id, d);
+            }
+        });
+        return answer;
     }
 
     /**
@@ -84,8 +101,30 @@ final class IntegrationSummaryHints {
         if (dir == null || routeId == null) {
             return null;
         }
-        Note n = entry(dir.toAbsolutePath().normalize()).notes().get(routeId);
+        Map<String, Note> notes = entry(dir.toAbsolutePath().normalize()).notes();
+        Note n = notes.containsKey(routeId) ? notes.get(routeId) : notes.get(RouteKeys.sourceKey(dir, routeId));
         return n == null || n.ai() && !enabled() ? null : n;
+    }
+
+    /**
+     * What the AI wrote about a decision point of a route (CAMEL-25161), by its path in the route; null when there is
+     * nothing or the hints are off.
+     */
+    static IntegrationSummary.StepLabel step(Path dir, String routeId, String path) {
+        if (dir == null || routeId == null || path == null || !enabled()) {
+            return null;
+        }
+        List<IntegrationSummary.StepLabel> steps = entry(dir.toAbsolutePath().normalize()).steps();
+        if (steps.isEmpty()) {
+            return null;
+        }
+        String sourceKey = RouteKeys.sourceKey(dir, routeId);
+        for (IntegrationSummary.StepLabel st : steps) {
+            if (st.path().equals(path) && (st.route().equals(routeId) || st.route().equals(sourceKey))) {
+                return st;
+            }
+        }
+        return null;
     }
 
     /** Whether the project has an integration summary, whatever the settings. */
@@ -105,7 +144,7 @@ final class IntegrationSummaryHints {
         }
         long modified = modified(dir.resolve(IntegrationSummary.FILE_NAME));
         if (e != null && e.modified() == modified) {
-            e = new Entry(now, modified, e.descriptions(), e.notes());
+            e = new Entry(now, modified, e.descriptions(), e.notes(), e.steps());
             CACHE.put(dir, e);
             return e;
         }
@@ -116,10 +155,12 @@ final class IntegrationSummaryHints {
                 Map<String, Note> notes = new HashMap<>();
                 summary.notes().forEach((k, v) -> notes.put(k, new Note(v, true)));
                 summary.sourceNotes().forEach((k, v) -> notes.put(k, new Note(v, false)));
-                fresh = new Entry(now, modified, Map.copyOf(summary.descriptions()), Map.copyOf(notes));
+                fresh = new Entry(
+                        now, modified, Map.copyOf(summary.descriptions()), Map.copyOf(notes),
+                        List.copyOf(summary.steps()));
             }
         }
-        fresh = new Entry(now, modified, fresh.descriptions(), fresh.notes());
+        fresh = new Entry(now, modified, fresh.descriptions(), fresh.notes(), fresh.steps());
         CACHE.put(dir, fresh);
         return fresh;
     }

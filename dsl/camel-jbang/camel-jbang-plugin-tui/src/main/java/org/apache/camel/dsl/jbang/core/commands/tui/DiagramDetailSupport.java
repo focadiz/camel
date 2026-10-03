@@ -200,6 +200,42 @@ final class DiagramDetailSupport {
     }
 
     /**
+     * The title of a route's diagram with what the topology box of the route shows: its label (its own description,
+     * else the AI's, marked) and its group, in the group's colour, so going down a level keeps the context
+     * (CAMEL-25147).
+     */
+    static Line withRouteContext(Line title, IntegrationInfo info, String routeId, Path dir, boolean groups) {
+        List<Span> spans = new ArrayList<>(title.spans());
+        String label = null;
+        boolean ai = false;
+        if (info != null) {
+            for (RouteInfo r : info.routes) {
+                if (routeId.equals(r.routeId) && r.description != null && !r.description.isBlank()) {
+                    label = r.description;
+                }
+            }
+        }
+        if (label == null) {
+            label = IntegrationSummaryHints.description(dir, routeId);
+            ai = label != null;
+        }
+        if (label != null) {
+            spans.add(Span.styled("\u00b7 ", Theme.muted()));
+            spans.add(ai
+                    ? Span.styled(IntegrationSummaryHints.MARK + label.strip() + " ", Theme.aiAssisted())
+                    : Span.styled(label.strip() + " ", Style.EMPTY.fg(Theme.baseFg())));
+        }
+        RouteGroups.Tag tag = groups ? RouteGroups.of(dir).get(routeId) : null;
+        if (tag != null) {
+            spans.add(Span.styled("\u00b7 ", Theme.muted()));
+            spans.add(tag.ai()
+                    ? Span.styled("\u25b8 " + IntegrationSummaryHints.MARK + tag.name() + " ", Theme.aiAssisted())
+                    : Span.styled("\u25b8 " + tag.name() + " ", Style.EMPTY.fg(RouteGroups.colorOf(tag.index()))));
+        }
+        return Line.from(spans);
+    }
+
+    /**
      * The full description of the route, word-wrapped, which a topology box can only show the start of: the route's
      * own, else the one the AI project overview suggested, marked and styled as AI-assisted (CAMEL-25143).
      */
@@ -447,15 +483,49 @@ final class DiagramDetailSupport {
                         Span.raw(ln.id)));
             }
 
+            // a decision point with an AI label: the label, why, and what it decides on (CAMEL-25161)
+            var step = diagram.stepLabel(drillDownRouteId, ln.id);
+            if (step != null) {
+                lines.add(Line.from(Span.raw("")));
+                if (step.label() != null) {
+                    addWrapped(lines, step.label(), true, area.width() - 3, true);
+                }
+                if (step.why() != null) {
+                    addWrapped(lines, step.why(), true, area.width() - 3, false);
+                }
+                String code = ln.treeNode != null ? ln.treeNode.info.code : null;
+                if (code != null && !code.isBlank() && !label.equals(code)) {
+                    lines.add(Line.from(
+                            Span.styled(" Code: ", Theme.muted()),
+                            Span.raw(code)));
+                }
+            }
+
             String linkedRoute = diagram.findLinkedRouteId(drillDownRouteId);
             if (linkedRoute != null && diagram.getRouteLayout(linkedRoute) != null) {
                 lines.add(Line.from(Span.raw("")));
-                lines.add(Line.from(
-                        Span.styled(" ↵ ", Theme.label().bold()),
-                        Span.styled(linkedRoute, Style.EMPTY.fg(Theme.baseFg()))));
-            } else if (ln.treeNode != null && ln.treeNode.info.remote) {
-                lines.add(Line.from(Span.raw("")));
-                String arrow = "from".equals(ln.type) ? " external → " : " → external";
+                String linkedLabel = diagram.routeLabel(linkedRoute);
+                if (linkedLabel != null) {
+                    // the route in words, and its id, which the breadcrumb and the other views use
+                    lines.add(Line.from(
+                            Span.styled(" ↵ ", Theme.label().bold()),
+                            Span.styled(linkedLabel, Style.EMPTY.fg(Theme.baseFg())),
+                            Span.styled("  " + linkedRoute, Theme.muted())));
+                } else {
+                    lines.add(Line.from(
+                            Span.styled(" ↵ ", Theme.label().bold()),
+                            Span.styled(linkedRoute, Style.EMPTY.fg(Theme.baseFg()))));
+                }
+            }
+            if (ln.treeNode != null && ln.treeNode.info.remote) {
+                if (linkedRoute == null || diagram.getRouteLayout(linkedRoute) == null) {
+                    lines.add(Line.from(Span.raw("")));
+                }
+                // the direction in words, so it is not read the wrong way: the system comes in to Camel, or Camel
+                // sends to it
+                String system = BusinessEndpointLabels.systemName(ln.treeNode.info);
+                String external = system != null ? "external " + system : "external";
+                String arrow = "from".equals(ln.type) ? " " + external + " → Camel" : " Camel → " + external;
                 lines.add(Line.from(
                         Span.styled(arrow, Theme.muted())));
             }

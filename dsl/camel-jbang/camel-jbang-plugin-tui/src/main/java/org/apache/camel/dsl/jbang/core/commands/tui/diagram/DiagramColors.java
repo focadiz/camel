@@ -44,7 +44,7 @@ public final class DiagramColors {
     }
 
     static Style dashedBorderStyle() {
-        return Style.EMPTY.fg(Theme.diagramTo());
+        return Style.EMPTY.fg(Theme.diagramExternal());
     }
 
     static Style selectionStyle() {
@@ -76,7 +76,7 @@ public final class DiagramColors {
     }
 
     static Color externalColor() {
-        return Theme.diagramTo();
+        return Theme.diagramExternal();
     }
 
     static Color highlightOkColor() {
@@ -94,7 +94,7 @@ public final class DiagramColors {
         return switch (type) {
             case "from" -> Theme.diagramFrom();
             case "to", "toD", "wireTap", "enrich", "pollEnrich" -> Theme.diagramTo();
-            case "choice", "when", "otherwise" -> Theme.diagramChoice();
+            case "choice", "when", "otherwise", "switch", "case" -> Theme.diagramChoice();
             case "marshal", "unmarshal", "transform", "setBody", "setHeader", "setProperty",
                     "convertBodyTo", "removeHeader", "removeHeaders", "removeProperty", "removeProperties" ->
                 Theme.diagramTo();

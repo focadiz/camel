@@ -94,8 +94,9 @@ source, the capabilities the AI project overview proposed (`✦`,
 italic), shared services (routes several groups use), Other, and
 Utility (plumbing: error handling, logging; `u` shows it). A box
 lists its route count, entry points and external systems; the
-panel at the bottom right shows the inside of the selected group,
-its routes as a tree from where messages enter.
+Flow panel at the bottom right shows the inside of the selected group:
+each route in flow order, with the routes and remote systems it
+hands off to (a log is left out).
 `Enter` goes down to the topology of all routes with the group's
 routes highlighted, `Enter` on a route opens its diagram,
 `Esc` goes back up. It follows edited routes and a new summary
@@ -108,6 +109,23 @@ own shows the one the AI project overview (`/overview` in the AI
 panel) suggested, in italic and marked with `✦`. It was written by
 an AI, not taken from the route: review it, and `/overview apply`
 puts it into the route source once you agree.
+
+Inside a route, the decision points (choice, when, otherwise,
+filter, split, aggregate, loop, doTry, doCatch, circuitBreaker)
+show a short plain-language label from the AI overview in the
+business view (`b`), marked with `✦`; the technical view (`n`)
+keeps the expression. The Info panel of such a node shows the
+label, why the route decides there, and the code.
+
+The endpoints of remote systems are the edges of the integration
+and have their own color, in the route diagram as in the topology.
+The input of a route from a remote system shows where it comes
+from in the top border of its box, `AMQP ──▶`. Where a message is
+sent to a remote system and no route of the integration consumes
+it, the bottom border names where it leaves to: `──▶ AMQP`. A
+hand-off to another route of the integration shows `↵ route`
+beside the box. A route that starts itself on a schedule (timer,
+cron, quartz, scheduler) shows `↻ ──▶` at its input.
 
 ## Route Diagram
 

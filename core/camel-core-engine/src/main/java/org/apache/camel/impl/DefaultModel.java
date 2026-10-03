@@ -51,6 +51,8 @@ import org.apache.camel.model.RouteFilters;
 import org.apache.camel.model.RouteTemplateDefinition;
 import org.apache.camel.model.RouteTemplateParameterDefinition;
 import org.apache.camel.model.RoutesDefinition;
+import org.apache.camel.model.SwitchCaseDefinition;
+import org.apache.camel.model.SwitchDefinition;
 import org.apache.camel.model.TemplatedRouteDefinition;
 import org.apache.camel.model.TemplatedRouteParameterDefinition;
 import org.apache.camel.model.ToDefinition;
@@ -225,81 +227,74 @@ public class DefaultModel implements Model {
                         }
                     }
                 }
+                // how many rest services call each direct route
+                Map<String, Integer> directUsage = new HashMap<>();
+                for (RouteDefinition r : allRoutes) {
+                    ToDefinition to = restRouteToInline(r);
+                    if (to != null) {
+                        directUsage.merge(to.getEndpointUri(), 1, Integer::sum);
+                    }
+                }
                 for (RouteDefinition r : allRoutes) {
                     // loop all rest routes
                     FromDefinition from = r.getInput();
-                    if (from != null && !r.isInlined()) {
-                        // only attempt to inline if not already inlined
-                        String uri = from.getEndpointUri();
-                        if (uri != null && uri.startsWith("rest:")) {
-                            // find first EIP in the outputs (skip abstract which are onException/intercept
-                            // etc)
-                            ToDefinition to = null;
-                            for (ProcessorDefinition<?> def : r.getOutputs()) {
-                                if (def.isAbstract()) {
-                                    continue;
+                    ToDefinition to = restRouteToInline(r);
+                    if (to != null) {
+                        String toUri = to.getEndpointUri();
+                        RouteDefinition toBeInlined = directs.get(toUri);
+                        // a route used by more than one rest service is not inlined (its outputs can only
+                        // belong to one route), so the rest services call it
+                        if (toBeInlined != null && directUsage.getOrDefault(toUri, 0) == 1) {
+                            toBeRemoved.add(toBeInlined);
+                            // inline the source loc:line as starting from this direct input
+                            FromDefinition inlinedFrom = toBeInlined.getInput();
+                            from.setLocation(inlinedFrom.getLocation());
+                            from.setLineNumber(inlinedFrom.getLineNumber());
+                            // inline by replacing the outputs (preserve all abstracts such as interceptors)
+                            List<ProcessorDefinition<?>> toBeRemovedOut = new ArrayList<>();
+                            for (ProcessorDefinition<?> out : r.getOutputs()) {
+                                // should be removed if to be added via inlined
+                                boolean remove = toBeInlined.getOutputs().stream().anyMatch(o -> o == out);
+                                if (!remove) {
+                                    remove = !out.isAbstract(); // remove all non abstract
                                 }
-                                if (def instanceof ToDefinition toDefinition) {
-                                    to = toDefinition;
-                                }
-                                break;
-                            }
-                            if (to != null) {
-                                String toUri = to.getEndpointUri();
-                                RouteDefinition toBeInlined = directs.get(toUri);
-                                if (toBeInlined != null) {
-                                    toBeRemoved.add(toBeInlined);
-                                    // inline the source loc:line as starting from this direct input
-                                    FromDefinition inlinedFrom = toBeInlined.getInput();
-                                    from.setLocation(inlinedFrom.getLocation());
-                                    from.setLineNumber(inlinedFrom.getLineNumber());
-                                    // inline by replacing the outputs (preserve all abstracts such as interceptors)
-                                    List<ProcessorDefinition<?>> toBeRemovedOut = new ArrayList<>();
-                                    for (ProcessorDefinition<?> out : r.getOutputs()) {
-                                        // should be removed if to be added via inlined
-                                        boolean remove = toBeInlined.getOutputs().stream().anyMatch(o -> o == out);
-                                        if (!remove) {
-                                            remove = !out.isAbstract(); // remove all non abstract
-                                        }
-                                        if (remove) {
-                                            toBeRemovedOut.add(out);
-                                        }
-                                    }
-                                    r.getOutputs().removeAll(toBeRemovedOut);
-                                    r.getOutputs().addAll(toBeInlined.getOutputs());
-                                    // inlined outputs should have re-assigned parent to this route
-                                    r.getOutputs().forEach(o -> o.setParent(r));
-                                    // and copy over various configurations
-                                    if (toBeInlined.getRouteId() != null) {
-                                        r.setId(toBeInlined.getRouteId());
-                                    }
-                                    r.setNodePrefixId(toBeInlined.getNodePrefixId());
-                                    r.setGroup(toBeInlined.getGroup());
-                                    r.setAutoStartup(toBeInlined.getAutoStartup());
-                                    r.setDelayer(toBeInlined.getDelayer());
-                                    r.setInputType(toBeInlined.getInputType());
-                                    r.setOutputType(toBeInlined.getOutputType());
-                                    r.setLogMask(toBeInlined.getLogMask());
-                                    r.setMessageHistory(toBeInlined.getMessageHistory());
-                                    if (toBeInlined.getStreamCache() != null) {
-                                        // keep stream caching from the rest verb unless the inlined route sets it
-                                        r.setStreamCache(toBeInlined.getStreamCache());
-                                    }
-                                    r.setTrace(toBeInlined.getTrace());
-                                    r.setStartupOrder(toBeInlined.getStartupOrder());
-                                    r.setRoutePolicyRef(toBeInlined.getRoutePolicyRef());
-                                    r.setRouteConfigurationId(toBeInlined.getRouteConfigurationId());
-                                    r.setRoutePolicies(toBeInlined.getRoutePolicies());
-                                    r.setShutdownRoute(toBeInlined.getShutdownRoute());
-                                    r.setShutdownRunningTask(toBeInlined.getShutdownRunningTask());
-                                    r.setErrorHandlerRef(toBeInlined.getErrorHandlerRef());
-                                    r.setPrecondition(toBeInlined.getPrecondition());
-                                    if (toBeInlined.isErrorHandlerFactorySet()) {
-                                        r.setErrorHandler(toBeInlined.getErrorHandler());
-                                    }
-                                    r.markInlined();
+                                if (remove) {
+                                    toBeRemovedOut.add(out);
                                 }
                             }
+                            r.getOutputs().removeAll(toBeRemovedOut);
+                            r.getOutputs().addAll(toBeInlined.getOutputs());
+                            // inlined outputs should have re-assigned parent to this route
+                            r.getOutputs().forEach(o -> o.setParent(r));
+                            // and copy over various configurations
+                            if (toBeInlined.getRouteId() != null) {
+                                r.setId(toBeInlined.getRouteId());
+                            }
+                            r.setNodePrefixId(toBeInlined.getNodePrefixId());
+                            r.setGroup(toBeInlined.getGroup());
+                            r.setAutoStartup(toBeInlined.getAutoStartup());
+                            r.setDelayer(toBeInlined.getDelayer());
+                            r.setInputType(toBeInlined.getInputType());
+                            r.setOutputType(toBeInlined.getOutputType());
+                            r.setLogMask(toBeInlined.getLogMask());
+                            r.setMessageHistory(toBeInlined.getMessageHistory());
+                            if (toBeInlined.getStreamCache() != null) {
+                                // keep stream caching from the rest verb unless the inlined route sets it
+                                r.setStreamCache(toBeInlined.getStreamCache());
+                            }
+                            r.setTrace(toBeInlined.getTrace());
+                            r.setStartupOrder(toBeInlined.getStartupOrder());
+                            r.setRoutePolicyRef(toBeInlined.getRoutePolicyRef());
+                            r.setRouteConfigurationId(toBeInlined.getRouteConfigurationId());
+                            r.setRoutePolicies(toBeInlined.getRoutePolicies());
+                            r.setShutdownRoute(toBeInlined.getShutdownRoute());
+                            r.setShutdownRunningTask(toBeInlined.getShutdownRunningTask());
+                            r.setErrorHandlerRef(toBeInlined.getErrorHandlerRef());
+                            r.setPrecondition(toBeInlined.getPrecondition());
+                            if (toBeInlined.isErrorHandlerFactorySet()) {
+                                r.setErrorHandler(toBeInlined.getErrorHandler());
+                            }
+                            r.markInlined();
                         }
                     }
                 }
@@ -321,6 +316,28 @@ public class DefaultModel implements Model {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * The to of a rest route (not already inlined) that is a candidate for inlining, which is the first EIP in the
+     * outputs (skipping abstracts such as onException and intercept)
+     */
+    private static ToDefinition restRouteToInline(RouteDefinition r) {
+        FromDefinition from = r.getInput();
+        if (from == null || r.isInlined()) {
+            return null;
+        }
+        String uri = from.getEndpointUri();
+        if (uri == null || !uri.startsWith("rest:")) {
+            return null;
+        }
+        for (ProcessorDefinition<?> def : r.getOutputs()) {
+            if (def.isAbstract()) {
+                continue;
+            }
+            return def instanceof ToDefinition toDefinition ? toDefinition : null;
+        }
+        return null;
     }
 
     @Override
@@ -834,21 +851,31 @@ public class DefaultModel implements Model {
             Collection<ProcessorDefinition> col = ProcessorDefinitionHelper.filterTypeInOutputs(route.getOutputs(),
                     ProcessorDefinition.class);
             for (ProcessorDefinition proc : col) {
-                String pid = proc.getId();
-                // match direct by ids
-                if (id.equals(pid)) {
+                if (matchesId(proc, id)) {
                     return proc;
                 }
-                // try to match via node prefix id
-                if (proc.getNodePrefixId() != null) {
-                    pid = proc.getNodePrefixId() + pid;
-                    if (id.equals(pid)) {
-                        return proc;
+                if (proc instanceof SwitchDefinition sw) {
+                    // a case of a Switch is not a processor in the tree: its send is, under the id of the case
+                    for (SwitchCaseDefinition c : sw.getCases()) {
+                        ToDefinition send = c.getToDefinition();
+                        if (send != null && matchesId(send, id)) {
+                            return send;
+                        }
                     }
                 }
             }
         }
         return null;
+    }
+
+    private static boolean matchesId(ProcessorDefinition<?> proc, String id) {
+        String pid = proc.getId();
+        // match direct by ids
+        if (id.equals(pid)) {
+            return true;
+        }
+        // try to match via node prefix id
+        return proc.getNodePrefixId() != null && id.equals(proc.getNodePrefixId() + pid);
     }
 
     @Override
