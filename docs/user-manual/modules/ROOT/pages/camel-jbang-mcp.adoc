@@ -317,8 +317,11 @@ project `directory` as an argument, the runtime tools take the integration `name
   `not defined in the schema` validation error.
 
 | `camel_validate_source`
-| Validates Camel YAML DSL or `.properties` source without writing: the YAML DSL schema (a misspelled option
-  such as `logLevel` instead of `loggingLevel`), endpoint URIs, simple expressions, and `camel.*` options.
+| Validates Camel YAML, Java or XML DSL or `.properties` source without writing: the YAML DSL schema (a
+  misspelled option such as `logLevel` instead of `loggingLevel`), endpoint URIs, simple expressions, and
+  `camel.*` options. The routes of a Java or XML file are read into the Camel model without compiling them and
+  get the same checks (the endpoint DSL and constants resolved, a `to` that needs `toD`); what the parser could
+  not read is listed under `notChecked`.
   Takes the content, or reads the file from the project directory. With `camelVersion` (or the version of the
   selected integration in the TUI) the catalog and the YAML DSL schema of that Camel version answer, the schema
   read from its `camel-yaml-dsl` jar; without it the CLI's own, with nothing to download.
@@ -393,11 +396,27 @@ project `directory` as an argument, the runtime tools take the integration `name
 
 | `camel_save_project_summary`
 | Saves what the agent wrote about a project (an overview, the business capabilities, the utility routes, and for
-  routes that lack them a short label and a one-sentence note, as `route id: label | sentence`) into
+  routes that lack them a short label and a one-sentence note, as `route id: label \| sentence`) into
   `camel-summary.md`, next to the facts derived from the sources. The AI-assisted sections
   are marked, so people and tools can tell them apart from what the sources say. Route sources are not changed.
   See xref:camel-jbang-ai.adoc#_project_overview[Project overview].
 |===
+
+==== Repeated calls
+
+The catalog lookups `camel_catalog_doc`, `camel_catalog_find`, `camel_catalog_sample` and `camel_error_diagnose`
+are deterministic: the same arguments always give the same answer. Both servers mark them in the tool listing
+with `"_meta": {"camel.apache.org/deterministic": true}`, so a client can notice repeats itself.
+
+An agent asking one of them the same question again and again gets nothing new, and a small local model can get
+stuck doing that until its tool call budget is spent. So the first two identical calls of a session are answered
+in full, and from the third the answer is a short note instead: that the call was already answered and how many
+times it was asked. The changed answer helps the agent break the loop, and the context is not filled with copies.
+Calls with other arguments, and the tools that read files, logs or the running integration, are always answered
+in full, so re-reading a file after an edit or polling a log keeps working.
+
+A session is an MCP connection of `camel mcp`, and for `camel tui --mcp` the time from one `initialize` of the
+client to the next.
 
 === Catalog Exploration
 
@@ -571,7 +590,10 @@ The advisories are also browseable as MCP resources: `camel://security/advisorie
 | Tool | Description
 
 | `camel_transform_route`
-| Assists with route DSL format transformation between YAML and XML.
+| Converts routes between the YAML, XML and Java DSLs, as `camel transform route` does, without running them:
+  routes, rests, route templates, route configurations and beans. The result is read back and compared with the
+  source, and what differs or is not carried over is returned in `notes`. A route that cannot be converted without
+  running it (such as a processor lambda) is refused with the reason.
 
 | `camel_configuration_validate`
 | Validate Camel configuration property lines (e.g., from `application.properties`). Detects misspelled option
@@ -791,7 +813,7 @@ process is running).
 | OpenTelemetry spans with trace IDs, durations, route IDs and status (requires `--observe`).
 
 | `camel_runtime_startup_steps`
-| Startup recorder steps with duration, level and type (requires `camel.main.startup-recorder=true`).
+| Startup recorder steps with duration, level and type (requires `camel.main.startup-recorder=backlog`).
 
 | `camel_runtime_route_analysis`
 | Anti-pattern and structure analysis per route: error handling, complexity, component usage.

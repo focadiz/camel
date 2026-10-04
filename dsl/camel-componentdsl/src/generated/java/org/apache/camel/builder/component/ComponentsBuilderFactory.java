@@ -3800,6 +3800,19 @@ public interface ComponentsBuilderFactory {
         return OaipmhComponentBuilderFactory.oaipmh();
     }
     /**
+     * OData (camel-odata)
+     * Camel OData Component
+     * 
+     * Category: http
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-odata
+     * 
+     * @return the dsl builder
+     */
+    static OdataComponentBuilderFactory.OdataComponentBuilder odata() {
+        return OdataComponentBuilderFactory.odata();
+    }
+    /**
      * Olingo2 (camel-olingo2)
      * Communicate with OData 2.0 services using Apache Olingo.
      * 
@@ -3867,6 +3880,20 @@ public interface ComponentsBuilderFactory {
      */
     static OpenaiComponentBuilderFactory.OpenaiComponentBuilder openai() {
         return OpenaiComponentBuilderFactory.openai();
+    }
+    /**
+     * OpenFGA (camel-openfga)
+     * Authorize an Exchange against an OpenFGA relationship graph, and maintain
+     * the relationship tuples it is authorized against.
+     * 
+     * Category: security
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfga
+     * 
+     * @return the dsl builder
+     */
+    static OpenfgaComponentBuilderFactory.OpenfgaComponentBuilder openfga() {
+        return OpenfgaComponentBuilderFactory.openfga();
     }
     /**
      * OpenSearch (camel-opensearch)

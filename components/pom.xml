@@ -242,11 +242,13 @@
         <module>camel-oauth</module>
         <module>camel-observation</module>
         <module>camel-ocsf</module>
+        <module>camel-odata</module>
         <module>camel-ognl</module>
         <module>camel-olingo2</module>
         <module>camel-olingo4</module>
         <module>camel-once</module>
         <module>camel-opa</module>
+        <module>camel-openfga</module>
         <module>camel-openstack</module>
         <module>camel-opentelemetry</module>
         <module>camel-opentelemetry2</module>

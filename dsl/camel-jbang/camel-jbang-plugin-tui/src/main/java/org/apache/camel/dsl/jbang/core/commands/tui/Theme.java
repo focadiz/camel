@@ -303,16 +303,16 @@ public final class Theme {
      */
     public static synchronized SyntaxTheme syntaxTheme() {
         return SyntaxTheme.builder()
-                .token(TokenType.COMMENT, Style.EMPTY.fg(syntaxComment()))
-                .token(TokenType.KEYWORD, Style.EMPTY.fg(syntaxKeyword()))
-                .token(TokenType.TYPE, Style.EMPTY.fg(syntaxType()))
-                .token(TokenType.STRING, Style.EMPTY.fg(syntaxString()))
-                .token(TokenType.NUMBER, Style.EMPTY.fg(syntaxConstant()))
-                .token(TokenType.CONSTANT, Style.EMPTY.fg(syntaxConstant()))
-                .token(TokenType.FUNCTION, Style.EMPTY.fg(syntaxFunction()))
-                .token(TokenType.ANNOTATION, Style.EMPTY.fg(syntaxFunction()))
-                .token(TokenType.TAG, Style.EMPTY.fg(syntaxKeyword()))
-                .token(TokenType.ATTRIBUTE, Style.EMPTY.fg(syntaxFunction()))
+                .token(TokenType.COMMENT, syntaxCommentStyle())
+                .token(TokenType.KEYWORD, syntaxKeywordStyle())
+                .token(TokenType.TYPE, syntaxTypeStyle())
+                .token(TokenType.STRING, syntaxStringStyle())
+                .token(TokenType.NUMBER, syntaxConstantStyle())
+                .token(TokenType.CONSTANT, syntaxConstantStyle())
+                .token(TokenType.FUNCTION, syntaxFunctionStyle())
+                .token(TokenType.ANNOTATION, syntaxFunctionStyle())
+                .token(TokenType.TAG, syntaxKeywordStyle())
+                .token(TokenType.ATTRIBUTE, syntaxFunctionStyle())
                 .build();
     }
 
@@ -365,6 +365,50 @@ public final class Theme {
                 isDark() ? SyntaxHighlighter.MONOKAI_TEXT : SyntaxHighlighter.LIGHT_TEXT);
     }
 
+    // ---- Syntax highlighting styles ----
+    //
+    // The syntax color plus any text-style the token sets (bold, italic, dim, underline), so a theme without colors to
+    // spare can tell code apart by weight, as the Monochrome and CRT themes do.
+
+    /** Syntax style for comments. */
+    public static synchronized Style syntaxCommentStyle() {
+        return syntaxStyle("syntax-comment", syntaxComment());
+    }
+
+    /** Syntax style for string literals and values. */
+    public static synchronized Style syntaxStringStyle() {
+        return syntaxStyle("syntax-string", syntaxString());
+    }
+
+    /** Syntax style for keywords, YAML/properties keys and XML tags. */
+    public static synchronized Style syntaxKeywordStyle() {
+        return syntaxStyle("syntax-keyword", syntaxKeyword());
+    }
+
+    /** Syntax style for functions, annotations and XML attribute names. */
+    public static synchronized Style syntaxFunctionStyle() {
+        return syntaxStyle("syntax-function", syntaxFunction());
+    }
+
+    /** Syntax style for types. */
+    public static synchronized Style syntaxTypeStyle() {
+        return syntaxStyle("syntax-type", syntaxType());
+    }
+
+    /** Syntax style for numbers, booleans, null and entities. */
+    public static synchronized Style syntaxConstantStyle() {
+        return syntaxStyle("syntax-constant", syntaxConstant());
+    }
+
+    /** Syntax style for plain code text such as separators. */
+    public static synchronized Style syntaxTextStyle() {
+        return syntaxStyle("syntax-text", syntaxText());
+    }
+
+    private static Style syntaxStyle(String id, Color color) {
+        return style(id, Style.EMPTY).fg(color);
+    }
+
     /**
      * Text an AI wrote shown among facts from the sources and the runtime, such as a route description suggested by the
      * AI project overview (CAMEL-25143): italic in the optional {@code ai-assisted} color, else the theme's notice
@@ -407,6 +451,15 @@ public final class Theme {
     /** Diagram color for routing EIPs (split, aggregate, multicast, etc.). */
     public static synchronized Color diagramEip() {
         return color("diagram-eip", FALLBACK_DIAGRAM_EIP);
+    }
+
+    /**
+     * Diagram color for the edges of an integration: the endpoints of remote systems, where messages come in or leave
+     * (CAMEL-25161). Optional: a theme may define #diagram-external, else the info color is used, so the edges stand
+     * out from the steps.
+     */
+    public static synchronized Color diagramExternal() {
+        return color("diagram-external", info().fg().orElse(FALLBACK_DIAGRAM_TO));
     }
 
     /** Diagram fallback color for unknown EIP types. */

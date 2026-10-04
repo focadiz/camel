@@ -12565,6 +12565,46 @@ public class StaticEndpointBuilders {
         return OAIPMHEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
+     * OData (camel-odata)
+     * Camel OData Component
+     * 
+     * Category: http
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-odata
+     * 
+     * Syntax: <code>odata:httpUri</code>
+     * 
+     * Path parameter: httpUri (required)
+     * The base OData service URI
+     * 
+     * @param path httpUri
+     * @return the dsl builder
+     */
+    public static ODataEndpointBuilderFactory.ODataEndpointBuilder odata(String path) {
+        return odata("odata", path);
+    }
+    /**
+     * OData (camel-odata)
+     * Camel OData Component
+     * 
+     * Category: http
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-odata
+     * 
+     * Syntax: <code>odata:httpUri</code>
+     * 
+     * Path parameter: httpUri (required)
+     * The base OData service URI
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path httpUri
+     * @return the dsl builder
+     */
+    public static ODataEndpointBuilderFactory.ODataEndpointBuilder odata(String componentName, String path) {
+        return ODataEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
      * Olingo2 (camel-olingo2)
      * Communicate with OData 2.0 services using Apache Olingo.
      * 
@@ -12817,6 +12857,58 @@ public class StaticEndpointBuilders {
      */
     public static OpenAIEndpointBuilderFactory.OpenAIEndpointBuilder openai(String componentName, String path) {
         return OpenAIEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
+     * OpenFGA (camel-openfga)
+     * Authorize an Exchange against an OpenFGA relationship graph, and maintain
+     * the relationship tuples it is authorized against.
+     * 
+     * Category: security
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfga
+     * 
+     * Syntax: <code>openfga:operation</code>
+     * 
+     * Path parameter: operation (required)
+     * The operation to perform. The operation is taken from the endpoint only:
+     * it is deliberately not overridable by a message header, so that an
+     * inbound message cannot turn a check into a tuple write, nor a check for
+     * one relation into a check for a weaker one.
+     * There are 7 enums and the value can be one of: check, batchCheck,
+     * listObjects, listRelations, listUsers, writeTuples, deleteTuples
+     * 
+     * @param path operation
+     * @return the dsl builder
+     */
+    public static OpenFgaEndpointBuilderFactory.OpenFgaEndpointBuilder openfga(String path) {
+        return openfga("openfga", path);
+    }
+    /**
+     * OpenFGA (camel-openfga)
+     * Authorize an Exchange against an OpenFGA relationship graph, and maintain
+     * the relationship tuples it is authorized against.
+     * 
+     * Category: security
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfga
+     * 
+     * Syntax: <code>openfga:operation</code>
+     * 
+     * Path parameter: operation (required)
+     * The operation to perform. The operation is taken from the endpoint only:
+     * it is deliberately not overridable by a message header, so that an
+     * inbound message cannot turn a check into a tuple write, nor a check for
+     * one relation into a check for a weaker one.
+     * There are 7 enums and the value can be one of: check, batchCheck,
+     * listObjects, listRelations, listUsers, writeTuples, deleteTuples
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path operation
+     * @return the dsl builder
+     */
+    public static OpenFgaEndpointBuilderFactory.OpenFgaEndpointBuilder openfga(String componentName, String path) {
+        return OpenFgaEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
      * OpenSearch (camel-opensearch)
