@@ -55,4 +55,4 @@ fi
 mvn clean install -Dquickly -T 16
 
 # 2. Run the tests, skipping modules that can't pass on this machine (see notes above).
-mvn test -T 16 -DargLine="-Xmx16g" -pl '!components/camel-ai/camel-djl,!dsl/camel-jbang/camel-jbang-core,!dsl/camel-jbang/camel-jbang-plugin-kubernetes,!components/camel-printer'
+mvn test -T 16 -fae -DargLine="-Xmx16g" -pl '!components/camel-ai/camel-djl,!dsl/camel-jbang/camel-jbang-core,!dsl/camel-jbang/camel-jbang-plugin-kubernetes,!components/camel-printer'
