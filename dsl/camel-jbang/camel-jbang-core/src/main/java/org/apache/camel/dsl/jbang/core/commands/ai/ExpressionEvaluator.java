@@ -83,7 +83,23 @@ public final class ExpressionEvaluator {
             result.put("evaluatedIn", "a local scratch context (no integration selected)");
             evaluateLocally(ctx, lang, expression, body, predicate, result);
         }
+        String filter = filterNote(lang, expression, result.getString("status"));
+        if (filter != null) {
+            result.put("note", result.containsKey("note") ? result.getString("note") + "; " + filter : filter);
+        }
         return result;
+    }
+
+    /**
+     * A jsonpath filter gives a list, also for one match: models picked the element with an index after the filter,
+     * which gives an empty list, or a made-up syntax. In a route, resultType java.util.Map gives the one element.
+     */
+    static String filterNote(String lang, String expression, String status) {
+        if (!"jsonpath".equals(lang) || expression == null || !expression.contains("[?(") || !"ok".equals(status)) {
+            return null;
+        }
+        return "a filter gives a list, also for one match; in a route, resultType: java.util.Map gives the one element"
+               + " it matches (null when none does), and an index after the filter gives an empty list";
     }
 
     private static void evaluateInProcess(
@@ -91,9 +107,10 @@ public final class ExpressionEvaluator {
         String raw = ctx.executeAction("eval", root -> {
             root.put("language", lang);
             root.put("predicate", String.valueOf(predicate));
-            root.put("template", Jsoner.escape(expression));
+            // as they are: the action file is JSON, and the integration does not unescape them
+            root.put("template", expression);
             if (body != null) {
-                root.put("body", Jsoner.escape(body));
+                root.put("body", body);
             }
         });
         JsonObject out = null;

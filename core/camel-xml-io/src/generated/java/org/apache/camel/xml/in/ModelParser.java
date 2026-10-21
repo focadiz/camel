@@ -558,6 +558,7 @@ public class ModelParser extends BaseParser {
     }
     protected MarshalDefinition doParseMarshalDefinition() throws IOException, XmlPullParserException {
         return doParse(new MarshalDefinition(), (def, key, val) -> switch (key) {
+                case "allowNullBody": def.setAllowNullBody(val); yield true;
                 case "variableReceive": def.setVariableReceive(val); yield true;
                 case "variableSend": def.setVariableSend(val); yield true;
                 default: yield processorDefinitionAttributeHandler().accept(def, key, val);
@@ -2103,7 +2104,6 @@ public class ModelParser extends BaseParser {
                 case "contentTypeHeader": def.setContentTypeHeader(val); yield true;
                 case "delimiter": def.setDelimiter(val); yield true;
                 case "indent": def.setIndent(val); yield true;
-                case "lengthMarker": def.setLengthMarker(val); yield true;
                 case "strict": def.setStrict(val); yield true;
                 default: yield identifiedTypeAttributeHandler().accept(def, key, val);
             }, noElementHandler(), noValueHandler());
@@ -2393,12 +2393,6 @@ public class ModelParser extends BaseParser {
     }
     protected VariableExpression doParseVariableExpression() throws IOException, XmlPullParserException {
         return doParse(new VariableExpression(), expressionDefinitionAttributeHandler(), noElementHandler(), expressionDefinitionValueHandler());
-    }
-    protected WasmExpression doParseWasmExpression() throws IOException, XmlPullParserException {
-        return doParse(new WasmExpression(), (def, key, val) -> switch (key) {
-                case "module": def.setModule(val); yield true;
-                default: yield typedExpressionDefinitionAttributeHandler().accept(def, key, val);
-            }, noElementHandler(), expressionDefinitionValueHandler());
     }
     protected XMLTokenizerExpression doParseXMLTokenizerExpression() throws IOException, XmlPullParserException {
         return doParse(new XMLTokenizerExpression(), (def, key, val) -> switch (key) {
@@ -2901,7 +2895,6 @@ public class ModelParser extends BaseParser {
             case "spel": return doParseSpELExpression();
             case "tokenize": return doParseTokenizerExpression();
             case "variable": return doParseVariableExpression();
-            case "wasm": return doParseWasmExpression();
             case "xtokenize": return doParseXMLTokenizerExpression();
             case "xpath": return doParseXPathExpression();
             case "xquery": return doParseXQueryExpression();

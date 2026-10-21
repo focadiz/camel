@@ -74,10 +74,10 @@ class TransformToolsTest {
     void anEmptySemanticDeclarationIsRefusedToo(String target) {
         String route = """
                 import org.apache.camel.builder.RouteBuilder;
-                import static org.apache.camel.semantic.SemanticQuestionsBuilder.semanticQuestions;
+                import static org.apache.camel.semantic.SemanticEvaluationsBuilder.semanticEvaluations;
                 public class EmptySemanticRoute extends RouteBuilder {
                     public void configure() {
-                        semanticQuestions(this).register();
+                        semanticEvaluations(this).register();
                         from("direct:input").log("Hello");
                     }
                 }
@@ -105,15 +105,16 @@ class TransformToolsTest {
         if (source.equals("java")) {
             return """
                     import org.apache.camel.builder.RouteBuilder;
-                    import static org.apache.camel.semantic.SemanticQuestionsBuilder.semanticQuestions;
+                    import static org.apache.camel.semantic.SemanticEvaluationsBuilder.semanticEvaluations;
                     public class SemanticRoute extends RouteBuilder {
                         public void configure() {
-                            semanticQuestions(this).question("urgent").type("boolean").instructions("Urgent?")
+                            semanticEvaluations(this).evaluation("urgent").expert("decisions").type("boolean").instructions("Urgent?")
                                 .threshold("%s").uncertainty(0).uncertaintyPolicy("fail").register();
                             from("direct:input").setBody().language("semantic", "ref:urgent");
                         }
                     }
-                    """.formatted(threshold);
+                    """
+                    .formatted(threshold);
         }
         return """
                 - semantic:

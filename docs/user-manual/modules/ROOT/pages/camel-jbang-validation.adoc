@@ -71,16 +71,42 @@ and checked as YAML routes are:
 These are what the Java compiler cannot see inside the strings.
 A part of a Java route the parser cannot work out (a value computed at runtime) is left unchecked.
 
+=== What a running integration saw
+
+The YAML validator follows the message body through the steps of each route, and reports a step that cannot work on
+it: a field read such as `+${body.qty}+` on text that was never unmarshalled, or a Map that a `to: file` cannot write.
+Where the file does not tell what the body is, such as after a `platform-http` or `kafka` consumer, or after a call
+with `to: http`, it says nothing.
+
+When an integration runs the routes of the file with the message history on, such as with `camel run --dev`, the
+validator fills these gaps with what the integration saw at the endpoints of its routes: the body each consumer gave,
+and each producer returned, when all those bodies were of one kind (see
+xref:components:eips:message-history.adoc[Message History]). For example:
+
+[source,text]
+----
+route orders: simple reads a field of the body (${body.qty}), but the body here is still text, not parsed data - in
+the running app, from: platform-http:/orders gave a ByteArrayInputStreamCache: unmarshal it first with the data format
+of the payload (json, jacksonXml, csv, ...) to read its fields
+----
+
+So the next version of a file is checked against what the integration does with the current one, before it is
+written or reloaded. The tools that write files for AI agents validate the same way.
+
 === Endpoints no route consumes
 
 As the routes of an application are spread over the files of its directory, `camel validate source` also reports
-a `direct:` or `seda:` endpoint that a route sends to, but that no YAML, Java or XML route in the directory
-(and its subdirectories) consumes. With `direct:` sending a message to it fails; with `seda:` the messages
-would be queued and never read.
+a `direct:`, `seda:` or `disruptor:` endpoint that a route sends to, but that no YAML, Java or XML route in the
+directory (and its subdirectories) consumes. With `direct:` sending a message to it fails; with `seda:` and
+`disruptor:` the messages would be queued and never read.
 
-The check stays quiet when it cannot be certain: an endpoint only known at runtime (a property placeholder,
-an expression), route templates and Kamelets, and a directory that is only a part of a Maven or Gradle project,
-such as `src/main/resources/camel`.
+A route sends to an endpoint with `to`, a `toD` without an expression, `wireTap`, `enrich`, a rest verb, or the
+dead letter channel of an error handler. A route consumes an endpoint with its `from`, or with a `poll` or
+`pollEnrich`. `camel overview` reports the same endpoints, by the same rules.
+
+The check stays quiet when it cannot be certain: a route that consumes an endpoint only known at runtime (a
+property placeholder, an expression), route templates, Kamelets and Pipes, and a directory that is only a part of a
+Maven or Gradle project, such as `src/main/resources/camel`.
 
 == Validating configuration properties
 
@@ -111,6 +137,48 @@ Without `--output` the result is printed. The routes are loaded (not run) to wri
 placeholders are kept as they are. Use `camel validate yaml --canonical` to report the shorthands instead
 of rewriting them.
 
+=== Normalizing several files
+
+When `--output` is a directory (an existing one, or a name ending with `/`), each input file is normalized
+into a file of its own in that directory, with the name of the input file:
+
+[source,bash]
+----
+camel validate normalize a.yaml b.yaml --output=out/
+----
+
+writes `out/a.yaml` and `out/b.yaml`. A top-level `onException` applies to the routes of its own file only,
+and so it does in the normalized files. A Kamelet is written back to a file of its own name too, with only
+its template normalized.
+
+The files of the output directory are named as follows:
+
+* an input file keeps its name;
+* input files with the same name in different directories get the name of their parent directory in front:
+`orders/routes.yaml` and `billing/routes.yaml` are written as `orders-routes.yaml` and `billing-routes.yaml`;
+* when these names are the same too (`x/orders/routes.yaml` and `y/orders/routes.yaml`), the input files are
+numbered in the order they are given, before the extension: `routes-1.yaml`, `routes-2.yaml`
+(`action-1.kamelet.yaml` for `action.kamelet.yaml`);
+* a generated name is never the name of another input file or of another output file: a number already in use is
+skipped (with an input file named `routes-1.yaml`, the two `routes.yaml` become `routes-2.yaml` and `routes-3.yaml`).
+
+Beans, data formats, rests, route configurations and route templates go to the file they were loaded from.
+What was not loaded from one of the input files goes to `normalized.yaml` in the output directory
+(`normalized-1.yaml` if an input file is named `normalized.yaml`).
+
+The command refuses to write over one of its input files, for example with `--output=.` in the directory of the
+routes: the normalized files go to another directory.
+
+With `--output` set to a file, or without `--output`, the routes of all the files are merged into one
+YAML document. A top-level `onException` of one file then applies to the routes of all the files when
+the result is loaded, so the command prints a warning to the standard error when this happens (the
+standard output keeps only the YAML, so it can be redirected to a file):
+
+[source,text]
+----
+WARN: the top-level onException of b.yaml applies to the routes of a.yaml too, as the routes of all the files are written together: use --output with a directory to write one file per input file
+----
+
 == Validating against another Camel version or runtime
 
 Both commands validate against the CLI's own Camel version. A project that runs another version, or Camel
@@ -129,8 +197,10 @@ Validation error detected (errors:1)
 
 The catalog of that version is downloaded as for `camel catalog`, and the schema is read from the
 `camel-yaml-dsl` jar of that version (`--repos` and `--download=false` apply to both). With `--runtime=quarkus`
-the Quarkus platform is resolved from the Camel version through the Quarkus extension registry (cached for a
-day under `~/.camel`), or given with `--quarkus-version`; a component of the route that has no Camel Quarkus
+the Quarkus platform is resolved from the Camel version through the Quarkus extension registry (the response is
+cached for a day under `~/.camel`, and the platform resolved for a released Camel version that the platform
+carries exactly is cached for 7 days; a `-SNAPSHOT` version is never cached, and `--fresh` clears both), or given
+with `--quarkus-version`; a component of the route that has no Camel Quarkus
 extension, or no Camel Spring Boot starter with `--runtime=spring-boot`, is an error. `--canonical` needs Camel
 4.22 or later, the first version with the canonical schema.
 

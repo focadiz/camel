@@ -32,6 +32,7 @@ import org.apache.camel.AsyncCallback;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
+import org.apache.camel.RouteStoppingException;
 import org.apache.camel.RuntimeExchangeException;
 import org.apache.camel.spi.Synchronization;
 import org.apache.camel.util.ObjectHelper;
@@ -89,12 +90,13 @@ public class ConcurrentRequestsThrottler extends AbstractThrottler {
 
         try {
             if (!isRunAllowed()) {
-                throw new RejectedExecutionException("Run is not allowed");
+                throw new RouteStoppingException("Run is not allowed");
             }
 
             return doProcess(exchange, callback, state, queuedStart, doneSync);
 
         } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
             return handleInterrupt(exchange, callback, e, doneSync);
         } catch (final Exception t) {
             return handleException(exchange, callback, t, doneSync);

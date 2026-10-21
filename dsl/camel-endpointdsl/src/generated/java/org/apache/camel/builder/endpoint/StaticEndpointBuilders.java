@@ -3375,6 +3375,60 @@ public class StaticEndpointBuilders {
         return ChunkEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
+     * Citrus (camel-test-citrus)
+     * Citrus message validation component for testing
+     * 
+     * Category: testing
+     * Since: 4.24
+     * Maven coordinates: org.apache.camel:camel-test-citrus
+     * 
+     * Syntax: <code>citrus:operation/name</code>
+     * 
+     * Path parameter: operation (required)
+     * The operation to perform. 'validate' validates exchanges without
+     * modifying them. 'receive' validates exchanges and returns a simulated
+     * response.
+     * There are 2 enums and the value can be one of: validate, receive
+     * 
+     * Path parameter: name
+     * A unique name to identify this endpoint. Allows multiple Citrus endpoints
+     * with different validation expectations in the same route.
+     * 
+     * @param path operation/name
+     * @return the dsl builder
+     */
+    public static CitrusEndpointBuilderFactory.CitrusEndpointBuilder citrus(String path) {
+        return citrus("citrus", path);
+    }
+    /**
+     * Citrus (camel-test-citrus)
+     * Citrus message validation component for testing
+     * 
+     * Category: testing
+     * Since: 4.24
+     * Maven coordinates: org.apache.camel:camel-test-citrus
+     * 
+     * Syntax: <code>citrus:operation/name</code>
+     * 
+     * Path parameter: operation (required)
+     * The operation to perform. 'validate' validates exchanges without
+     * modifying them. 'receive' validates exchanges and returns a simulated
+     * response.
+     * There are 2 enums and the value can be one of: validate, receive
+     * 
+     * Path parameter: name
+     * A unique name to identify this endpoint. Allows multiple Citrus endpoints
+     * with different validation expectations in the same route.
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path operation/name
+     * @return the dsl builder
+     */
+    public static CitrusEndpointBuilderFactory.CitrusEndpointBuilder citrus(String componentName, String path) {
+        return CitrusEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
      * Class (camel-bean)
      * Invoke methods of Java beans specified by class name.
      * 
@@ -9725,6 +9779,50 @@ public class StaticEndpointBuilders {
         return KafkaEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
+     * Kafka Share (camel-kafka-share)
+     * Consume messages from Apache Kafka topics as a queue, using a share
+     * group.
+     * 
+     * Category: messaging
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-kafka-share
+     * 
+     * Syntax: <code>kafka-share:topic</code>
+     * 
+     * Path parameter: topic (required)
+     * Name of the topic to consume from. Use comma to separate multiple topics.
+     * Topic patterns are not supported by share groups.
+     * 
+     * @param path topic
+     * @return the dsl builder
+     */
+    public static KafkaShareEndpointBuilderFactory.KafkaShareEndpointBuilder kafkaShare(String path) {
+        return kafkaShare("kafka-share", path);
+    }
+    /**
+     * Kafka Share (camel-kafka-share)
+     * Consume messages from Apache Kafka topics as a queue, using a share
+     * group.
+     * 
+     * Category: messaging
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-kafka-share
+     * 
+     * Syntax: <code>kafka-share:topic</code>
+     * 
+     * Path parameter: topic (required)
+     * Name of the topic to consume from. Use comma to separate multiple topics.
+     * Topic patterns are not supported by share groups.
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path topic
+     * @return the dsl builder
+     */
+    public static KafkaShareEndpointBuilderFactory.KafkaShareEndpointBuilder kafkaShare(String componentName, String path) {
+        return KafkaShareEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
      * Kamelet (camel-kamelet)
      * To call Kamelets
      * 
@@ -11086,10 +11184,10 @@ public class StaticEndpointBuilders {
      * 
      * Path parameter: languageName (required)
      * Sets the name of the language to use
-     * There are 27 enums and the value can be one of: bean, constant,
+     * There are 26 enums and the value can be one of: bean, constant,
      * datasonnet, exchangeProperty, file, groovy, header, hl7terser, java,
      * joor, jq, js, jsonpath, mvel, ognl, python, python3, quickjs, ref,
-     * simple, spel, tokenize, variable, wasm, xpath, xquery, xtokenize
+     * simple, spel, tokenize, variable, xpath, xquery, xtokenize
      * 
      * Path parameter: resourceUri
      * Path to the resource, or a reference to lookup a bean in the Registry to
@@ -11115,10 +11213,10 @@ public class StaticEndpointBuilders {
      * 
      * Path parameter: languageName (required)
      * Sets the name of the language to use
-     * There are 27 enums and the value can be one of: bean, constant,
+     * There are 26 enums and the value can be one of: bean, constant,
      * datasonnet, exchangeProperty, file, groovy, header, hl7terser, java,
      * joor, jq, js, jsonpath, mvel, ognl, python, python3, quickjs, ref,
-     * simple, spel, tokenize, variable, wasm, xpath, xquery, xtokenize
+     * simple, spel, tokenize, variable, xpath, xquery, xtokenize
      * 
      * Path parameter: resourceUri
      * Path to the resource, or a reference to lookup a bean in the Registry to
@@ -11245,14 +11343,14 @@ public class StaticEndpointBuilders {
      * Syntax: <code>llm:operation</code>
      * 
      * Path parameter: operation (required)
-     * The operation to perform: 'chat-completion', 'responses',
+     * The operation to perform: 'chat-completion', 'decisions', 'responses',
      * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
      * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
      * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
      * 'image-generation', 'image-edit', or 'webhook' (a consumer)
-     * There are 17 enums and the value can be one of: chat-completion,
-     * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
-     * batch-cancel, batch-results, embeddings, tool-execution,
+     * There are 18 enums and the value can be one of: chat-completion,
+     * decisions, responses, responses-retrieve, responses-cancel, batch,
+     * batch-retrieve, batch-cancel, batch-results, embeddings, tool-execution,
      * audio-transcription, audio-translation, audio-speech, moderation,
      * image-generation, image-edit, webhook
      * 
@@ -12809,14 +12907,14 @@ public class StaticEndpointBuilders {
      * Syntax: <code>openai:operation</code>
      * 
      * Path parameter: operation (required)
-     * The operation to perform: 'chat-completion', 'responses',
+     * The operation to perform: 'chat-completion', 'decisions', 'responses',
      * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
      * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
      * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
      * 'image-generation', 'image-edit', or 'webhook' (a consumer)
-     * There are 17 enums and the value can be one of: chat-completion,
-     * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
-     * batch-cancel, batch-results, embeddings, tool-execution,
+     * There are 18 enums and the value can be one of: chat-completion,
+     * decisions, responses, responses-retrieve, responses-cancel, batch,
+     * batch-retrieve, batch-cancel, batch-results, embeddings, tool-execution,
      * audio-transcription, audio-translation, audio-speech, moderation,
      * image-generation, image-edit, webhook
      * 
@@ -12839,14 +12937,14 @@ public class StaticEndpointBuilders {
      * Syntax: <code>openai:operation</code>
      * 
      * Path parameter: operation (required)
-     * The operation to perform: 'chat-completion', 'responses',
+     * The operation to perform: 'chat-completion', 'decisions', 'responses',
      * 'responses-retrieve', 'responses-cancel', 'batch', 'batch-retrieve',
      * 'batch-cancel', 'batch-results', 'embeddings', 'tool-execution',
      * 'audio-transcription', 'audio-translation', 'audio-speech', 'moderation',
      * 'image-generation', 'image-edit', or 'webhook' (a consumer)
-     * There are 17 enums and the value can be one of: chat-completion,
-     * responses, responses-retrieve, responses-cancel, batch, batch-retrieve,
-     * batch-cancel, batch-results, embeddings, tool-execution,
+     * There are 18 enums and the value can be one of: chat-completion,
+     * decisions, responses, responses-retrieve, responses-cancel, batch,
+     * batch-retrieve, batch-cancel, batch-results, embeddings, tool-execution,
      * audio-transcription, audio-translation, audio-speech, moderation,
      * image-generation, image-edit, webhook
      * 
@@ -12857,6 +12955,60 @@ public class StaticEndpointBuilders {
      */
     public static OpenAIEndpointBuilderFactory.OpenAIEndpointBuilder openai(String componentName, String path) {
         return OpenAIEndpointBuilderFactory.endpointBuilder(componentName, path);
+    }
+    /**
+     * OpenFeature (camel-openfeature)
+     * Evaluate feature flags using the OpenFeature specification with flagd.
+     * 
+     * Category: cloud
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfeature
+     * 
+     * Syntax: <code>openfeature:domain/evaluationType</code>
+     * 
+     * Path parameter: domain (required)
+     * The OpenFeature domain to bind the provider to.
+     * 
+     * Path parameter: evaluationType
+     * The evaluation type. 'boolean' and 'isEnabled' use boolean evaluation
+     * (getBooleanValue). 'variant' uses string evaluation (getStringValue).
+     * When not set, the type is inferred from defaultValue.
+     * There are 3 enums and the value can be one of: boolean, variant,
+     * isEnabled
+     * 
+     * @param path domain/evaluationType
+     * @return the dsl builder
+     */
+    public static OpenFeatureEndpointBuilderFactory.OpenFeatureEndpointBuilder openfeature(String path) {
+        return openfeature("openfeature", path);
+    }
+    /**
+     * OpenFeature (camel-openfeature)
+     * Evaluate feature flags using the OpenFeature specification with flagd.
+     * 
+     * Category: cloud
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfeature
+     * 
+     * Syntax: <code>openfeature:domain/evaluationType</code>
+     * 
+     * Path parameter: domain (required)
+     * The OpenFeature domain to bind the provider to.
+     * 
+     * Path parameter: evaluationType
+     * The evaluation type. 'boolean' and 'isEnabled' use boolean evaluation
+     * (getBooleanValue). 'variant' uses string evaluation (getStringValue).
+     * When not set, the type is inferred from defaultValue.
+     * There are 3 enums and the value can be one of: boolean, variant,
+     * isEnabled
+     * 
+     * @param componentName to use a custom component name for the endpoint
+     * instead of the default name
+     * @param path domain/evaluationType
+     * @return the dsl builder
+     */
+    public static OpenFeatureEndpointBuilderFactory.OpenFeatureEndpointBuilder openfeature(String componentName, String path) {
+        return OpenFeatureEndpointBuilderFactory.endpointBuilder(componentName, path);
     }
     /**
      * OpenFGA (camel-openfga)
@@ -17597,18 +17749,20 @@ public class StaticEndpointBuilders {
     }
     /**
      * Wasm (camel-wasm)
-     * Invoke Wasm functions.
+     * Run Wasm programs (WASI Preview 1 command modules) with the message body
+     * as standard input.
      * 
      * Category: core,script
      * Since: 4.4
      * Maven coordinates: org.apache.camel:camel-wasm
      * 
-     * Syntax: <code>wasm:functionName</code>
+     * Syntax: <code>wasm:module</code>
      * 
-     * Path parameter: functionName (required)
-     * The Function Name
+     * Path parameter: module (required)
+     * The WASI Preview 1 command module to run, as a resource: by default from
+     * the classpath, or with a prefix such as classpath:, file: or http:
      * 
-     * @param path functionName
+     * @param path module
      * @return the dsl builder
      */
     public static WasmEndpointBuilderFactory.WasmEndpointBuilder wasm(String path) {
@@ -17616,20 +17770,22 @@ public class StaticEndpointBuilders {
     }
     /**
      * Wasm (camel-wasm)
-     * Invoke Wasm functions.
+     * Run Wasm programs (WASI Preview 1 command modules) with the message body
+     * as standard input.
      * 
      * Category: core,script
      * Since: 4.4
      * Maven coordinates: org.apache.camel:camel-wasm
      * 
-     * Syntax: <code>wasm:functionName</code>
+     * Syntax: <code>wasm:module</code>
      * 
-     * Path parameter: functionName (required)
-     * The Function Name
+     * Path parameter: module (required)
+     * The WASI Preview 1 command module to run, as a resource: by default from
+     * the classpath, or with a prefix such as classpath:, file: or http:
      * 
      * @param componentName to use a custom component name for the endpoint
      * instead of the default name
-     * @param path functionName
+     * @param path module
      * @return the dsl builder
      */
     public static WasmEndpointBuilderFactory.WasmEndpointBuilder wasm(String componentName, String path) {

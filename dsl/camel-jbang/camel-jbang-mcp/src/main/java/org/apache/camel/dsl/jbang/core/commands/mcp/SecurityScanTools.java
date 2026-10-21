@@ -39,6 +39,7 @@ import org.apache.camel.util.SecurityUtils;
  * Distinct from {@link HardenTools} which provides general security context and CVE advisories — this tool performs
  * line-by-line static analysis to find specific violations.
  */
+@McpSecured
 @ApplicationScoped
 public class SecurityScanTools {
 
@@ -64,7 +65,7 @@ public class SecurityScanTools {
                         + "and CVE advisories.")
     public SecurityScanResult camel_security_scan(
             @ToolArg(description = "The Camel route content (YAML, XML, or Java DSL)") String route,
-            @ToolArg(description = "Route format: yaml, xml, or java (default: yaml)") String format) {
+            @ToolArg(description = "Route format: yaml, xml, or java (default: yaml)", required = false) String format) {
 
         if (route == null || route.isBlank()) {
             throw new ToolCallException("Route content is required", null);

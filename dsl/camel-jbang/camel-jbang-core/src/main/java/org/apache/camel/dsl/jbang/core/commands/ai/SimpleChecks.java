@@ -127,7 +127,14 @@ final class SimpleChecks {
             List<String> errors, CamelCatalog catalog, String text, int lineNum, boolean predicate, boolean logMessage,
             boolean inAggregate) {
         if (text.startsWith("resource:")) {
-            // the expression is loaded from a file (resource:classpath:script.txt), which is not the text here
+            // the expression is loaded from a file (resource:classpath:script.txt), which is not the text here.
+            // The location is a template itself, so a ternary written in it is still literal text (CAMEL-25485)
+            if (!predicate && !logMessage) {
+                String ternary = topLevelTernary(text);
+                if (ternary != null) {
+                    errors.add("Line " + lineNum + ": " + ternary);
+                }
+            }
             return;
         }
         boolean syntaxError = false;
@@ -223,6 +230,7 @@ final class SimpleChecks {
 
     static boolean isMissingDependency(String error) {
         return error.startsWith("No language could be found for:")
+                || error.contains("requires camel-semantic")
                 || error.startsWith("No " + SimpleLanguageFunctionFactory.FACTORY + "/")
                         && error.contains("service could be found in the classpath");
     }

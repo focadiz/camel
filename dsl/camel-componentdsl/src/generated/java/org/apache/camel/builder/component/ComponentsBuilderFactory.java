@@ -1061,6 +1061,19 @@ public interface ComponentsBuilderFactory {
         return ChunkComponentBuilderFactory.chunk();
     }
     /**
+     * Citrus (camel-test-citrus)
+     * Citrus message validation component for testing
+     * 
+     * Category: testing
+     * Since: 4.24
+     * Maven coordinates: org.apache.camel:camel-test-citrus
+     * 
+     * @return the dsl builder
+     */
+    static CitrusComponentBuilderFactory.CitrusComponentBuilder citrus() {
+        return CitrusComponentBuilderFactory.citrus();
+    }
+    /**
      * Class (camel-bean)
      * Invoke methods of Java beans specified by class name.
      * 
@@ -2997,6 +3010,20 @@ public interface ComponentsBuilderFactory {
         return KafkaComponentBuilderFactory.kafka();
     }
     /**
+     * Kafka Share (camel-kafka-share)
+     * Consume messages from Apache Kafka topics as a queue, using a share
+     * group.
+     * 
+     * Category: messaging
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-kafka-share
+     * 
+     * @return the dsl builder
+     */
+    static KafkaShareComponentBuilderFactory.KafkaShareComponentBuilder kafkaShare() {
+        return KafkaShareComponentBuilderFactory.kafkaShare();
+    }
+    /**
      * Kamelet (camel-kamelet)
      * To call Kamelets
      * 
@@ -3880,6 +3907,19 @@ public interface ComponentsBuilderFactory {
      */
     static OpenaiComponentBuilderFactory.OpenaiComponentBuilder openai() {
         return OpenaiComponentBuilderFactory.openai();
+    }
+    /**
+     * OpenFeature (camel-openfeature)
+     * Evaluate feature flags using the OpenFeature specification with flagd.
+     * 
+     * Category: cloud
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfeature
+     * 
+     * @return the dsl builder
+     */
+    static OpenfeatureComponentBuilderFactory.OpenfeatureComponentBuilder openfeature() {
+        return OpenfeatureComponentBuilderFactory.openfeature();
     }
     /**
      * OpenFGA (camel-openfga)
@@ -5248,7 +5288,8 @@ public interface ComponentsBuilderFactory {
     }
     /**
      * Wasm (camel-wasm)
-     * Invoke Wasm functions.
+     * Run Wasm programs (WASI Preview 1 command modules) with the message body
+     * as standard input.
      * 
      * Category: core,script
      * Since: 4.4

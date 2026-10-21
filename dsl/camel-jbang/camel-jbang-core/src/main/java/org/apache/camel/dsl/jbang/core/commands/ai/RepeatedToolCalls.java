@@ -16,7 +16,11 @@
  */
 package org.apache.camel.dsl.jbang.core.commands.ai;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -46,29 +50,51 @@ public final class RepeatedToolCalls {
     private final Map<String, Integer> counts = new HashMap<>();
 
     /**
-     * Counts the call, and returns the short note to answer with instead of the full answer, or null when the tool
-     * should run and answer in full: a tool that is not deterministic, or one of the first {@value #FULL_ANSWERS}
-     * identical calls.
+     * Returns the short note to answer with instead of running the tool, or null when the tool should run and answer in
+     * full: a tool that is not deterministic, or one of the first {@value #FULL_ANSWERS} identical calls. When this
+     * method returns null the caller must invoke {@link #recordSuccessfulAnswer(ToolDescriptor, Map)} after the tool
+     * returns successfully; failed calls (those that throw) must not count against the retry budget.
      */
     public synchronized JsonObject repeatOf(ToolDescriptor tool, Map<String, ?> args) {
-        if (tool == null || !tool.isDeterministic()) {
+        if (tool == null || !tool.isDeterministic(args)) {
             return null;
         }
         if (counts.size() >= MAX_TRACKED) {
             counts.clear();
         }
-        int times = counts.merge(key(tool.name(), args), 1, Integer::sum);
-        if (times <= FULL_ANSWERS) {
+        // Peek at the current count without incrementing. The increment happens only after a successful answer
+        // (recordSuccessfulAnswer), so a call that throws an exception does not consume the retry budget.
+        int current = counts.getOrDefault(key(tool.name(), args, tool.deterministicWhen()), 0);
+        if (current < FULL_ANSWERS) {
+            // Will be incremented by recordSuccessfulAnswer; answer in full.
             return null;
         }
+        // Already answered FULL_ANSWERS times; the next identical call gets the note.
+        // Increment so timesAsked keeps growing (allows the model to see the repetition count rising).
+        int times = counts.merge(key(tool.name(), args, tool.deterministicWhen()), 1, Integer::sum);
         JsonObject note = new JsonObject();
         note.put("repeated", true);
         note.put("tool", tool.name());
         note.put("timesAsked", times);
         note.put("note", tool.name() + " was already called with these same arguments " + (times - 1)
-                         + " times in this session and answered in full. Its answer does not change, so it is not sent"
-                         + " again: it is in your earlier tool result.");
+                         + " times in this session. Its answer does not change, so it is not sent again: it is in your"
+                         + " earlier tool result."
+                         + (tool.repeatHint() != null ? " " + tool.repeatHint() : ""));
         return note;
+    }
+
+    /**
+     * Records that a tool answered a call in full (i.e. did not throw). Only successful answers count against the
+     * {@value #FULL_ANSWERS} budget; calls that throw an exception do not.
+     */
+    public synchronized void recordSuccessfulAnswer(ToolDescriptor tool, Map<String, ?> args) {
+        if (tool == null || !tool.isDeterministic(args)) {
+            return;
+        }
+        if (counts.size() >= MAX_TRACKED) {
+            counts.clear();
+        }
+        counts.merge(key(tool.name(), args, tool.deterministicWhen()), 1, Integer::sum);
     }
 
     /** Forgets the calls so far: a new session starts. */
@@ -81,16 +107,36 @@ public final class RepeatedToolCalls {
      * argument as an empty string is asking the same question as one that leaves it out.
      */
     static String key(String tool, Map<String, ?> args) {
+        return key(tool, args, null);
+    }
+
+    /**
+     * As {@link #key(String, Map)}, with the argument that makes the call deterministic (the source to validate) keyed
+     * by a digest of its exact text: whitespace can decide the answer there (a newline before {@code <?xml ...?>}), and
+     * the key does not hold a copy of the source.
+     */
+    static String key(String tool, Map<String, ?> args, String exact) {
         Map<String, String> sorted = new TreeMap<>();
         if (args != null) {
             for (Map.Entry<String, ?> e : args.entrySet()) {
                 Object v = e.getValue();
-                String s = v != null ? v.toString().trim() : "";
-                if (!s.isEmpty()) {
-                    sorted.put(e.getKey(), s);
+                String s = v != null ? v.toString() : "";
+                if (s.isBlank()) {
+                    continue;
                 }
+                sorted.put(e.getKey(), e.getKey().equals(exact) ? digest(s) : s.trim());
             }
         }
         return tool + sorted;
+    }
+
+    private static String digest(String text) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            // every JVM has SHA-256; the text itself is an exact key too
+            return text;
+        }
     }
 }

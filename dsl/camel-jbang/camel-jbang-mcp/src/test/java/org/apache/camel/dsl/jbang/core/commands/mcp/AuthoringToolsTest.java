@@ -34,6 +34,7 @@ import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolCallException;
 import org.apache.camel.dsl.jbang.core.commands.ai.ToolDescriptor;
 import org.apache.camel.dsl.jbang.core.commands.ai.ToolRegistry;
+import org.apache.camel.dsl.jbang.core.common.CommandLineHelper;
 import org.apache.camel.util.json.JsonObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,18 +73,18 @@ class AuthoringToolsTest {
 
     @Test
     void catalogDocAnswersWithOptionsAndUriRules() {
-        JsonObject timer = tools.camel_catalog_doc(null, "timer", null, "component", null, null, null, null, null, null);
+        JsonObject timer = tools.camel_catalog_doc(null, "timer", null, "component", null, null, null, null, null, null, null);
         assertThat(timer.getString("kind")).isEqualTo("component");
         assertThat(timer.getString("uriSyntax")).contains("(timerName) go in the path");
         assertThat(timer.getInteger("matchedOptions")).isGreaterThan(5);
         JsonObject check
-                = tools.camel_catalog_doc(null, null, "timer:tick?periodd=5s", null, null, null, null, null, null, null);
+                = tools.camel_catalog_doc(null, null, "timer:tick?periodd=5s", null, null, null, null, null, null, null, null);
         assertThat(check.getBoolean("valid")).isFalse();
         assertThat(List.copyOf(check.getCollection("problems")).get(0).toString()).contains("periodd");
         // a lookup that finds nothing answers with an error field and suggestions, as the TUI does, not an exception
-        assertThat(tools.camel_catalog_doc(null, null, null, null, null, null, null, null, null, null).getString("error"))
+        assertThat(tools.camel_catalog_doc(null, null, null, null, null, null, null, null, null, null, null).getString("error"))
                 .contains("required");
-        JsonObject mqtt = tools.camel_catalog_doc(null, "mqtt", null, "component", null, null, null, null, null, null);
+        JsonObject mqtt = tools.camel_catalog_doc(null, "mqtt", null, "component", null, null, null, null, null, null, null);
         assertThat(mqtt.getString("error")).contains("mqtt");
         assertThat(List.copyOf(mqtt.getCollection("suggestions")).toString()).contains("paho-mqtt5");
     }
@@ -103,18 +104,43 @@ class AuthoringToolsTest {
         JsonObject listed = tools.camel_get_files(dir.toString(), null);
         assertThat(listed.getInteger("totalFiles")).isEqualTo(1);
         assertThat(tools.camel_get_files(dir.toString(), "demo.camel.yaml").getString("content")).isEqualTo(route);
-        assertThat(tools.camel_validate_source(dir.toString(), "demo.camel.yaml", null, null).getBoolean("valid"))
+        assertThat(tools.camel_validate_source(null, dir.toString(), "demo.camel.yaml", null, null).getBoolean("valid"))
                 .isTrue();
         assertThatThrownBy(() -> tools.camel_get_files(null, null))
                 .isInstanceOf(ToolCallException.class).hasMessageContaining("directory is required");
     }
 
+    /** CAMEL-25501: several places of one file in one call, written once. */
     @Test
-    void anUnknownIntegrationNameIsAnError() {
-        assertThatThrownBy(() -> tools.camel_eval_expression("${body}", null, "camel", "no-such-app-xyz-1"))
-                .isInstanceOf(ToolCallException.class).hasMessageContaining("no-such-app-xyz-1");
-        assertThatThrownBy(() -> tools.camel_get_log("no-such-app-xyz-1", null, null, null, null))
-                .isInstanceOf(ToolCallException.class).hasMessageContaining("no-such-app-xyz-1");
+    void severalEditsOfOneFileAreWrittenOnce(@TempDir Path dir) throws Exception {
+        String route = "- route:\n    from:\n      uri: timer:tick\n      steps:\n        - log:\n            message: hi\n"
+                       + "        - log:\n            message: bye\n";
+        Files.writeString(dir.resolve("demo.camel.yaml"), route, StandardCharsets.UTF_8);
+
+        JsonObject edited = tools.camel_edit_file(dir.toString(), "demo.camel.yaml", null, null,
+                List.of(new AuthoringTools.FileEdit("message: hi", "message: hello"),
+                        new AuthoringTools.FileEdit("message: bye", "message: goodbye")),
+                null);
+
+        assertThat(edited.getString("status")).isEqualTo("edited");
+        assertThat(edited.getInteger("edits")).isEqualTo(2);
+        assertThat(Files.readString(dir.resolve("demo.camel.yaml"), StandardCharsets.UTF_8))
+                .contains("message: hello").contains("message: goodbye");
+    }
+
+    @Test
+    void anUnknownIntegrationNameIsAnError(@TempDir Path home) {
+        // a home of its own: the log tool looks for the previous run of an integration that is not running
+        Path previousHome = CommandLineHelper.getHomeDir();
+        CommandLineHelper.useHomeDir(home.toString());
+        try {
+            assertThatThrownBy(() -> tools.camel_eval_expression("${body}", null, "camel", "no-such-app-xyz-1"))
+                    .isInstanceOf(ToolCallException.class).hasMessageContaining("no-such-app-xyz-1");
+            assertThatThrownBy(() -> tools.camel_get_log("no-such-app-xyz-1", null, null, null, null, null))
+                    .isInstanceOf(ToolCallException.class).hasMessageContaining("no-such-app-xyz-1");
+        } finally {
+            CommandLineHelper.useHomeDir(previousHome.toString());
+        }
     }
 
     @Test
@@ -152,9 +178,10 @@ class AuthoringToolsTest {
                 boolean marked = meta != null && "camel.apache.org/".equals(meta.prefix())
                         && "deterministic".equals(meta.name()) && "true".equals(meta.value());
                 assertThat(marked).as(m.getName() + " marked deterministic").isEqualTo(td.isDeterministic());
+                // a tool that is deterministic for some arguments (camel_validate_source with content) counts too
                 boolean connected = Arrays.stream(m.getParameterTypes()).anyMatch(t -> t == McpConnection.class);
                 assertThat(connected).as(m.getName() + " gets the connection to count its repeats")
-                        .isEqualTo(td.isDeterministic());
+                        .isEqualTo(td.isDeterministic() || td.deterministicWhen() != null);
             }
         }
     }
@@ -165,9 +192,9 @@ class AuthoringToolsTest {
         counted.repeatedCalls = new RepeatedCallSessions();
         McpConnection agent = connection("agent-1");
 
-        JsonObject first = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null);
-        JsonObject second = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null);
-        JsonObject third = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null);
+        JsonObject first = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null, null);
+        JsonObject second = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null, null);
+        JsonObject third = counted.camel_catalog_doc(agent, "sql", null, null, null, null, null, null, null, null, null);
 
         assertThat(first.get("repeated")).isNull();
         assertThat(second).isEqualTo(first);
@@ -177,9 +204,30 @@ class AuthoringToolsTest {
         assertThat(third.toJson().length()).isLessThan(first.toJson().length() / 4);
 
         // another question, or another connection, is answered in full
-        assertThat(counted.camel_catalog_doc(agent, "timer", null, null, null, null, null, null, null, null)
+        assertThat(counted.camel_catalog_doc(agent, "timer", null, null, null, null, null, null, null, null, null)
                 .get("repeated")).isNull();
-        assertThat(counted.camel_catalog_doc(connection("agent-2"), "sql", null, null, null, null, null, null, null, null)
+        assertThat(counted.camel_catalog_doc(connection("agent-2"), "sql", null, null, null, null, null, null, null, null, null)
+                .get("repeated")).isNull();
+    }
+
+    /** CAMEL-25371: validating the same content again is a repeat, also over the camel mcp server. */
+    @Test
+    void aThirdIdenticalValidationOfTheSameContentGetsAShortNote() {
+        AuthoringTools counted = new AuthoringTools();
+        counted.repeatedCalls = new RepeatedCallSessions();
+        McpConnection agent = connection("agent-1");
+        String content = "- from:\n    uri: timer:x\n    steps:\n      - to: log:x\n";
+
+        JsonObject first = counted.camel_validate_source(agent, null, "route.camel.yaml", content, null);
+        JsonObject second = counted.camel_validate_source(agent, null, "route.camel.yaml", content, null);
+        JsonObject third = counted.camel_validate_source(agent, null, "route.camel.yaml", content, null);
+
+        assertThat(first.get("repeated")).isNull();
+        assertThat(second.get("repeated")).isNull();
+        assertThat(third.getBoolean("repeated")).isTrue();
+        assertThat(third.getString("note")).contains("camel_validate_source", "change the line the error names");
+        // changed content is a new question
+        assertThat(counted.camel_validate_source(agent, null, "route.camel.yaml", content + "\n", null)
                 .get("repeated")).isNull();
     }
 
@@ -193,7 +241,7 @@ class AuthoringToolsTest {
         Map<String, String> args = AuthoringTools.args("name", "timer", "kind", "", "limit", 3, "dev", true, "x", null);
         assertThat(args).containsExactly(Map.entry("name", "timer"), Map.entry("limit", "3"), Map.entry("dev", "true"));
         // a blank kind means auto-detect, not "a kind called nothing"
-        assertThat(tools.camel_catalog_doc(null, "timer", "", "", null, null, null, "", "period", "").getString("kind"))
+        assertThat(tools.camel_catalog_doc(null, "timer", "", "", null, null, null, "", "period", null, "").getString("kind"))
                 .isEqualTo("component");
         assertThat(tools.camel_catalog_find(null, "mqtt", "", null, "").getInteger("count")).isGreaterThan(0);
     }

@@ -185,12 +185,38 @@ public interface Route extends RuntimeConfiguration {
     String getConfigurationId();
 
     /**
-     * Gets the source resource that this route is located from
+     * Gets the source resource that this route is located from. For a route created from a route template (or a
+     * Kamelet) this is the resource with the route template.
      *
      * @return the source, or null if this route is not loaded from a resource
      */
     @Nullable
     Resource getSourceResource();
+
+    /**
+     * Gets the id of the route template (or Kamelet) this route was created from.
+     *
+     * @return the route template id, or null if this route was not created from a route template
+     * @since  4.24
+     */
+    @Nullable
+    default String getRouteTemplateId() {
+        return null;
+    }
+
+    /**
+     * Gets the resource that declares the templated route this route was created from. The source resource of the route
+     * is the resource with the route template (where its source location is).
+     * <p/>
+     * Tools that load routes again from their resources, such as route reloading in development mode, need both.
+     *
+     * @return the resource, or null if this route was not created from a templated route loaded from a resource
+     * @since  4.24
+     */
+    @Nullable
+    default Resource getTemplatedRouteResource() {
+        return null;
+    }
 
     /**
      * The source:line-number where the route input is located in the source code
@@ -352,19 +378,23 @@ public interface Route extends RuntimeConfiguration {
     String getRouteNote();
 
     /**
-     * Get the route type.
+     * Gets the route model (such as the route definition) this route was created from.
      *
-     * Important: is null after the route has been created.
-     *
-     * @return the route type during creation of the route, is null after the route has been created.
+     * @return the route model, or null if this route was not created from a model
      */
     @Nullable
     NamedNode getRoute();
 
     /**
-     * Clears the route model when its no longer needed.
+     * Previously cleared the route model after the route was created. This method is now a no-op.
+     *
+     * @deprecated since 4.24.0 - the route model is retained at runtime; this method is a no-op and will be removed in
+     *             a later release.
      */
-    void clearRouteModel();
+    @Deprecated(since = "4.24.0", forRemoval = true)
+    default void clearRouteModel() {
+        // no-op: the route model is now retained at runtime
+    }
 
     //
     // CREATION TIME

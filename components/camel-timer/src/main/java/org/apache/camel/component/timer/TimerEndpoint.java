@@ -42,7 +42,8 @@ import org.apache.camel.support.DefaultEndpoint;
  */
 @ManagedResource(description = "Managed TimerEndpoint")
 @UriEndpoint(firstVersion = "1.0.0", scheme = "timer", title = "Timer", syntax = "timer:timerName", consumerOnly = true,
-             remote = false, category = { Category.CORE, Category.SCHEDULING }, headersClass = TimerConstants.class)
+             remote = false, internal = true, category = { Category.CORE, Category.SCHEDULING },
+             headersClass = TimerConstants.class)
 public class TimerEndpoint extends DefaultEndpoint implements MultipleConsumersSupport {
     @UriPath
     @Metadata(required = true)
@@ -273,7 +274,9 @@ public class TimerEndpoint extends DefaultEndpoint implements MultipleConsumersS
     }
 
     /**
-     * Whether to include metadata in the exchange such as fired time, timer name, timer count etc.
+     * Whether to include metadata in the exchange: the exchange properties CamelTimerCounter (the fire count, 1 on the
+     * first fire), CamelTimerName, CamelTimerPeriod, CamelTimerFiredTime and CamelTimerTime (when the time option is
+     * set), and the headers CamelTimerFiredTime and CamelMessageTimestamp.
      */
     @ManagedAttribute(description = "Include metadata")
     public void setIncludeMetadata(boolean includeMetadata) {

@@ -6,6 +6,9 @@ your confirmation.
 
 See xref:camel-jbang-tui.adoc[Camel TUI] for getting started and the other pages.
 
+TIP: Not sure whether you want the AI panel, a coding agent or an MCP server? See
+xref:camel-jbang-tui-ai-ways.adoc[Camel TUI Ways to Use AI] for the options side by side.
+
 == Key Features
 
 * <<_why_this_matters,*Same view as you*>> -- routes, statistics, traces, errors, logs and sources
@@ -32,6 +35,8 @@ have -- and can act on it. The agent can:
   read the message trace, correlate with route statistics, and produce a diagnostic report
   with annotated screenshots showing exactly where and why the failure occurred
 
+image::jbang/camel-tui-ai-agent-teaching.gif[An agent connected over MCP explains the integration with arrows and notes on the topology and the route statistics]
+
 == Enabling MCP
 
 [source,bash]
@@ -42,7 +47,9 @@ camel tui --mcp
 This starts an MCP server on `localhost:8123` (configurable with `--mcp-port`).
 The server is bound to `127.0.0.1` only -- it never listens on external interfaces.
 
-When MCP is active, the TUI footer shows the connection status.
+When MCP is active, the TUI footer shows the connection status: the port and the name of the connected client,
+with ● while it calls tools and ○ while it is idle (it stays connected while idle, as an MCP client only sends a
+request when it uses a tool), or ✗ when no client has connected yet or the client closed its session.
 Use *F2* -> _MCP Info_ to see server details and _MCP Log_ to view the tool call history.
 
 == Status document resources
@@ -75,6 +82,8 @@ gives it the TUI's own MCP server, and shows the agent's answer, tool calls and 
 drives the TUI through the same `tui_*` tools that external MCP clients use, and can also read and edit your
 route sources with its own tools.
 
+image::jbang/camel-tui-ai-acp-claude-code.gif[Claude Code picked with Ctrl+P in the AI panel answers a question about the running integration from the TUI's tools]
+
 Any agent that speaks ACP works. Press *Ctrl+P* in the AI panel and pick one of the agents known to work, or
 `acp:custom` to run any other ACP agent:
 
@@ -101,14 +110,13 @@ required. *F2* -> _MCP Info_ shows the port and the tool calls the agent makes. 
 `--mcp`, it is bound to `127.0.0.1` with no authentication, and it rejects requests that carry an `Origin`
 header (so a web page cannot reach it) or that are not JSON.
 
-Permissions: calls to the TUI's read-only tools (the `tui_get_*` tools, catalog documentation, expression
-evaluation, locate, validate) are approved without asking. So is `camel_write_file` while the write mode is
-`confirm` or `live`, because the TUI itself asks before the file is touched (the diff dialog or the live replay
-in the Source editor); with `/write auto` the permission popup is the only question and stays. A tool that
-changes anything else, such as `camel_control`, `tui_send_message` or `tui_execute_sql`, opens the same popup as
-any other request; answering "Always allow" makes it a one-time question per tool. For anything else the agent
-wants to do, such as editing a file with its own tools or running a command, a popup shows the agent's options;
-*Enter* selects, *Esc* rejects that one call and lets the turn continue, and *Ctrl+C* cancels the whole turn.
+Permissions: calls to the TUI's own tools are approved without asking, as for the AI panel's own model. The
+TUI asks you itself before the few calls that need it, such as a file write, a message to an endpoint the
+integration does not have, SQL that is not a `SELECT`, or a Groovy expression (see
+xref:camel-jbang-tui-ai.adoc#_what_asks_first[What asks first]). For anything the agent wants to do with its own
+tools, such as editing a file or running a command, a popup shows the agent's options; *Enter* selects, *Esc*
+rejects that one call and lets the turn continue, and *Ctrl+C* cancels the whole turn. While a tape records, or
+`--record` plays one, nothing asks.
 The preamble tells the agent to edit route sources through `camel_write_file` rather than its own file tools, so
 that you see the diff or watch the edit; when it still asks to edit a file directly, the popup says so and *Esc*
 sends it back to `camel_write_file`.
@@ -166,14 +174,19 @@ by purpose:
 * *Observe* -- read the screen, get structured state, query tables/logs/errors/traces/topology/diagram/files,
   list the running infra services (brokers, databases) and read their logs, read the performance of the
   local Ollama server (`tui_get_ollama`: loaded model, tokens per second, context fill, host load, request log)
-* *Navigate* -- switch tabs, select integrations, select routes, send keystrokes, apply filters
+* *Navigate* -- switch tabs, select integrations, select routes, send keystrokes, apply filters. Keystrokes
+  never answer a dialog that asks the user to confirm an action (quitting, stopping an integration, a file write
+  or another call of an AI tool, discarding changes): `tui_send_keys` says so while one is open, and keys already sent are dropped. Only the user
+  answers it
 * *Act* -- send test messages to endpoints, start/stop/restart routes, change log levels,
   list and launch the bundled examples, start/stop/restart infra services, run any entry of
   the *F2* actions menu by its label
 * *Edit* -- write a source file in the integration's source directory (`camel_write_file`), see below
 * *Annotate* -- locate text and diagram nodes by coordinates, draw shapes (boxes, highlights,
   arrows, underlines, text labels), show captions with typewriter animation
-* *Present* -- take screenshots, record tape sessions, control demo pacing
+* *Present* -- take screenshots, record tape sessions, control demo pacing. To record a demo as a GIF,
+  an agent can also write a `.tape` file using the same commands and play it with `camel tui --record`, see
+  xref:camel-jbang-tui-recording.adoc#_scripted_recording[Scripted Recording]
 
 == Editing source files from an AI agent
 
@@ -247,7 +260,7 @@ told what became of it with your next question.
 
 An edit (`camel_edit_file`, which the agent uses to change a file without rewriting it) goes the same way: the
 snippet is replaced in the file's content and the result is confirmed or replayed like any write, so what you see
-in the editor is the finished file either way.
+in the editor is the finished file either way. An edit with several changes (`edits`) is one change to confirm.
 
 While the replay pauses you can also ask the agent about the change it just made: *F8* opens the AI panel
 with the question prefilled (`About edit 2 of 3:`), in a compact panel that leaves the edit in view (*Shift+F8*

@@ -30,6 +30,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
@@ -44,7 +45,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.InvalidPayloadException;
+import org.apache.camel.Message;
 import org.apache.camel.WrappedFile;
+import org.apache.camel.support.BodyFacts;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
@@ -256,11 +259,41 @@ public class FileOperations implements GenericFileOperations<File> {
         // java.io.File
     }
 
+    /**
+     * The jailStartingDirectory check of the producer is lexical (see {@code GenericFileProducer.createFileName}), so a
+     * symbolic link inside the starting directory (a link to a file, or a directory segment of the name) would redirect
+     * the write outside of it. Only paths that are lexically inside the starting directory are checked, so a
+     * tempFileName the route author placed outside of it (such as ../work) keeps working. The producer also calls this
+     * before it creates missing parent directories of the target.
+     */
+    void jailToStartingDirectory(File target) {
+        if (!endpoint.isJailStartingDirectory()) {
+            return;
+        }
+        Path startingDirectory = endpoint.getFile().toPath();
+        if (!target.toPath().toAbsolutePath().normalize().startsWith(startingDirectory.toAbsolutePath().normalize())) {
+            return;
+        }
+        boolean within;
+        try {
+            within = GenericFileHelper.isWithinDirectoryResolvingLinks(target.toPath(), startingDirectory);
+        } catch (IOException e) {
+            throw new GenericFileOperationFailedException(
+                    "Cannot verify file: " + target + " is within the starting directory: " + endpoint.getFile(), e);
+        }
+        if (!within) {
+            throw new GenericFileOperationFailedException(
+                    "Cannot write file: " + target + " as it resolves outside the starting directory: "
+                                                          + endpoint.getFile());
+        }
+    }
+
     @Override
     public boolean storeFile(String fileName, Exchange exchange, long size) throws GenericFileOperationFailedException {
         ObjectHelper.notNull(endpoint, "endpoint");
 
         File file = new File(fileName);
+        jailToStartingDirectory(file);
 
         // if an existing file already exists what should we do?
         if (file.exists()) {
@@ -320,7 +353,7 @@ public class FileOperations implements GenericFileOperations<File> {
                 // prefer FileInputStream over general stream
                 InputStream is = exchange.getMessage().getBody(FileInputStream.class);
                 if (is == null) {
-                    is = exchange.getMessage().getMandatoryBody(InputStream.class);
+                    is = mandatoryBodyStream(exchange, exchange.getMessage(), file);
                 }
                 dis = new DigestInputStream(is, digest);
             }
@@ -347,14 +380,40 @@ public class FileOperations implements GenericFileOperations<File> {
             setPermissions(file);
 
             return true;
-        } catch (InvalidPayloadException | NoSuchAlgorithmException | IOException e) {
+        } catch (InvalidPayloadException e) {
+            // say why: the body cannot be written as it is
+            throw new GenericFileOperationFailedException("Cannot store file: " + file + ": " + e.getMessage(), e);
+        } catch (NoSuchAlgorithmException | IOException e) {
             throw new GenericFileOperationFailedException("Cannot store file: " + file, e);
+        }
+    }
+
+    /**
+     * The body as a stream to write. A Map, a List or an object (a body unmarshalled from JSON, XML or CSV, or built in
+     * the route) cannot become one, and the converter's message only names the conversion: say what the body is, the
+     * step that set it, and the marshal that writes it, in the data format the file name names (CAMEL-25751,
+     * CAMEL-25749).
+     */
+    static InputStream mandatoryBodyStream(Exchange exchange, Message message, File file) throws InvalidPayloadException {
+        try {
+            return message.getMandatoryBody(InputStream.class);
+        } catch (InvalidPayloadException e) {
+            String hint = BodyFacts.hint(exchange, BodyFacts.Need.BYTES, file.getName());
+            if (hint != null) {
+                InvalidPayloadException answer = new InvalidPayloadException(
+                        exchange, InputStream.class, message,
+                        BodyFacts.describe(exchange) + ", which is not file content: " + hint);
+                answer.initCause(e.getCause() != null ? e.getCause() : e);
+                throw answer;
+            }
+            throw e;
         }
     }
 
     @Override
     public boolean storeFileDirectly(String name, String payload) throws GenericFileOperationFailedException {
         File file = new File(name);
+        jailToStartingDirectory(file);
         try {
             Files.writeString(file.toPath(), payload, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.CREATE);
@@ -367,7 +426,7 @@ public class FileOperations implements GenericFileOperations<File> {
     private void handleStreamAsFileSource(Exchange exchange, File file, InputStream is)
             throws InvalidPayloadException, IOException {
         if (is == null) {
-            is = exchange.getIn().getMandatoryBody(InputStream.class);
+            is = mandatoryBodyStream(exchange, exchange.getIn(), file);
         }
         writeFileByStream(is, file);
     }
@@ -388,7 +447,7 @@ public class FileOperations implements GenericFileOperations<File> {
             // okay no direct reader conversion, so use an input stream
             // (which a lot can be converted as)
             if (is == null) {
-                is = exchange.getIn().getMandatoryBody(InputStream.class);
+                is = mandatoryBodyStream(exchange, exchange.getIn(), file);
             }
             in = new InputStreamReader(is);
         }

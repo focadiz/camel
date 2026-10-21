@@ -97,7 +97,9 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     private Map<String, Object> templateParameters;
     private Map<String, Object> templateDefaultParameters;
     private RouteTemplateContext routeTemplateContext;
+    private String routeTemplateId;
     private Resource resource;
+    private Resource templatedRouteResource;
     private String precondition;
 
     public RouteDefinition() {
@@ -893,6 +895,20 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
         this.routeTemplateContext = routeTemplateContext;
     }
 
+    /**
+     * The id of the route template (or Kamelet) this route was created from, or <tt>null</tt> if the route was not
+     * created from a route template.
+     */
+    @Override
+    public String getRouteTemplateId() {
+        return routeTemplateId;
+    }
+
+    @XmlTransient
+    public void setRouteTemplateId(String routeTemplateId) {
+        this.routeTemplateId = routeTemplateId;
+    }
+
     public Resource getResource() {
         return resource;
     }
@@ -900,6 +916,21 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     @XmlTransient
     public void setResource(Resource resource) {
         this.resource = resource;
+    }
+
+    /**
+     * The resource that declares the templated route this route was created from, or <tt>null</tt> if the route was not
+     * created from a templated route loaded from a resource. The route itself is in the resource with the route
+     * template, see {@link #getResource()}.
+     */
+    @Override
+    public Resource getTemplatedRouteResource() {
+        return templatedRouteResource;
+    }
+
+    @XmlTransient
+    public void setTemplatedRouteResource(Resource templatedRouteResource) {
+        this.templatedRouteResource = templatedRouteResource;
     }
 
     // Properties

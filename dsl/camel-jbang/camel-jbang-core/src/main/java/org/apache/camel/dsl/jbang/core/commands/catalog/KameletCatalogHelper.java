@@ -19,9 +19,11 @@ package org.apache.camel.dsl.jbang.core.commands.catalog;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.camel.main.download.DependencyDownloaderClassLoader;
 import org.apache.camel.main.download.MavenDependencyDownloader;
@@ -29,6 +31,9 @@ import org.apache.camel.support.ObjectHelper;
 import org.apache.camel.util.StringHelper;
 
 public final class KameletCatalogHelper {
+
+    // the kamelets of a released catalog, by version and repositories
+    private static final Map<String, Map<String, Object>> KAMELETS = new ConcurrentHashMap<>();
 
     private KameletCatalogHelper() {
     }
@@ -101,7 +106,7 @@ public final class KameletCatalogHelper {
 
     private static String getPropertyExample(Object prop) throws Exception {
         Method m = prop.getClass().getMethod("getExample");
-        Object en = ObjectHelper.invokeMethod(m, prop);
+        Object en = unwrap(ObjectHelper.invokeMethod(m, prop));
         if (en != null) {
             String t = en.toString();
             return StringHelper.removeLeadingAndEndingQuotes(t);
@@ -111,12 +116,27 @@ public final class KameletCatalogHelper {
 
     private static String getPropertyDefaultValue(Object prop) throws Exception {
         Method m = prop.getClass().getMethod("get_default");
-        Object dn = ObjectHelper.invokeMethod(m, prop);
+        Object dn = unwrap(ObjectHelper.invokeMethod(m, prop));
         if (dn != null) {
             String t = dn.toString();
             return StringHelper.removeLeadingAndEndingQuotes(t);
         }
         return null;
+    }
+
+    /**
+     * The value of a default, example or enum value of the Kamelet model, which wraps it in an AnyType whose toString
+     * is AnyType(value=1000): the docs showed that instead of 1000.
+     */
+    private static Object unwrap(Object value) {
+        if (value != null && value.getClass().getSimpleName().equals("AnyType")) {
+            try {
+                return ObjectHelper.invokeMethod(value.getClass().getMethod("getValue"), value);
+            } catch (Exception e) {
+                // not the AnyType we know: its text
+            }
+        }
+        return value;
     }
 
     private static List<String> getPropertyEnum(Object prop) throws Exception {
@@ -125,7 +145,7 @@ public final class KameletCatalogHelper {
         List<Object> list = (List<Object>) ObjectHelper.invokeMethod(m, prop);
         if (list != null && !list.isEmpty()) {
             for (var en : list) {
-                String t = en.toString();
+                String t = String.valueOf(unwrap(en));
                 t = StringHelper.removeLeadingAndEndingQuotes(t);
                 answer.add(t);
             }
@@ -141,6 +161,16 @@ public final class KameletCatalogHelper {
     }
 
     public static Map<String, Object> loadKamelets(String version, String repositories) throws Exception {
+        // a released catalog does not change, and loading it scans the classpath: a JVM that runs several commands
+        // (camel shell, the TUI, the MCP server, the tests) loads it once
+        boolean release = version != null && !version.endsWith("-SNAPSHOT");
+        String key = version + "|" + repositories;
+        if (release) {
+            Map<String, Object> answer = KAMELETS.get(key);
+            if (answer != null) {
+                return answer;
+            }
+        }
         var tccLoader = Thread.currentThread().getContextClassLoader();
         try (MavenDependencyDownloader downloader = new MavenDependencyDownloader()) {
             ClassLoader cl = createClassLoader();
@@ -153,7 +183,12 @@ public final class KameletCatalogHelper {
             Class<?> clazz = cl.loadClass("org.apache.camel.kamelets.catalog.KameletsCatalog");
             Object catalog = clazz.getDeclaredConstructor().newInstance();
             Method m = clazz.getMethod("getKamelets");
-            return (Map<String, Object>) ObjectHelper.invokeMethod(m, catalog);
+            Map<String, Object> answer = (Map<String, Object>) ObjectHelper.invokeMethod(m, catalog);
+            if (release && answer != null) {
+                answer = Collections.unmodifiableMap(answer);
+                KAMELETS.put(key, answer);
+            }
+            return answer;
         } finally {
             Thread.currentThread().setContextClassLoader(tccLoader);
         }

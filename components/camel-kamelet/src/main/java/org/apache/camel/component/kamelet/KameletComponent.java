@@ -16,9 +16,12 @@
  */
 package org.apache.camel.component.kamelet;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -49,6 +52,7 @@ import org.apache.camel.util.URISupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.component.kamelet.Kamelet.ADVANCED_OPTIONS;
 import static org.apache.camel.component.kamelet.Kamelet.BRIDGE_ERROR_HANDLER;
 import static org.apache.camel.component.kamelet.Kamelet.NO_ERROR_HANDLER;
 import static org.apache.camel.component.kamelet.Kamelet.PARAM_LOCATION;
@@ -61,6 +65,9 @@ import static org.apache.camel.component.kamelet.Kamelet.PARAM_UUID;
  */
 @Component(Kamelet.SCHEME)
 public class KameletComponent extends DefaultComponent {
+
+    /** The Kamelets whose route this thread is creating, innermost first: to find a Kamelet that uses itself. */
+    private static final ThreadLocal<Deque<String>> CREATING = ThreadLocal.withInitial(ArrayDeque::new);
 
     private static final Logger LOG = LoggerFactory.getLogger(KameletComponent.class);
 
@@ -97,6 +104,10 @@ public class KameletComponent extends DefaultComponent {
     private Map<String, Properties> routeProperties;
     @Metadata(defaultValue = Kamelet.DEFAULT_LOCATION)
     private String location = Kamelet.DEFAULT_LOCATION;
+
+    @Metadata(label = "advanced", defaultValue = "false",
+              description = "Whether to forward extra URI parameters to the endpoint wrapped by the Kamelet. When enabled, parameters that are not Kamelet template properties or reserved Kamelet options are appended to the wrapped source or sink endpoint. Disabled by default.")
+    private boolean advancedOptions;
 
     public KameletComponent() {
     }
@@ -136,6 +147,8 @@ public class KameletComponent extends DefaultComponent {
         // resolveRawParameterValues is false
         // this ensures that parameters such as passwords are used as-is and not encoded
         // but this requires to use RAW() syntax in the kamelet template.
+        // keep the values as written first (useRawUri), as advanced options are forwarded as URI text
+        final Map<String, Object> rawParameters = copyParameters(parameters);
         URISupport.resolveRawParameterValues(parameters);
 
         final KameletEndpoint endpoint;
@@ -169,6 +182,7 @@ public class KameletComponent extends DefaultComponent {
             endpoint.setTimeout(timeout);
             // endpoint specific location
             endpoint.setLocation(loc);
+            endpoint.setAdvancedOptions(advancedOptions);
 
             // set endpoint specific properties
             setProperties(endpoint, parameters);
@@ -193,6 +207,7 @@ public class KameletComponent extends DefaultComponent {
             endpoint.setTimeout(timeout);
             // endpoint specific location
             endpoint.setLocation(loc);
+            endpoint.setAdvancedOptions(advancedOptions);
 
             // set and remove endpoint specific properties
             setProperties(endpoint, parameters);
@@ -245,6 +260,16 @@ public class KameletComponent extends DefaultComponent {
             //
             Kamelet.extractKameletEnvironmentVariables(kameletProperties, templateId, routeId);
 
+            // Snapshot remaining URI parameters as advanced-option candidates when enabled. Template
+            // parameters are filtered later in templateToRoute, after the template is loaded. Only URI
+            // leftovers are candidates, not camel.kamelet.* or environment properties. The values are
+            // taken as written in the URI (percent-encoding and RAW(...) kept), so they can be appended
+            // to the wrapped endpoint URI as is.
+            Map<String, Object> advancedParamOptions = new LinkedHashMap<>();
+            if (endpoint.isAdvancedOptions()) {
+                parameters.keySet().forEach(key -> advancedParamOptions.put(key, rawParameters.get(key)));
+            }
+
             //
             // Uri params have the highest precedence
             //
@@ -258,6 +283,15 @@ public class KameletComponent extends DefaultComponent {
             kameletProperties.put(PARAM_UUID, uuid);
             kameletProperties.put(NO_ERROR_HANDLER, endpoint.isNoErrorHandler());
             kameletProperties.put(BRIDGE_ERROR_HANDLER, endpoint.isBridgeErrorHandler());
+
+            // Remove any route-scoped properties that might have used the internal prefix
+            // to prevent users from bypassing the intended separation
+            kameletProperties.keySet().removeIf(key -> key.startsWith("internal.advanced."));
+
+            // Pass the original option map as a single value so inner keys keep the user-supplied spelling
+            if (!advancedParamOptions.isEmpty()) {
+                kameletProperties.put(ADVANCED_OPTIONS, advancedParamOptions);
+            }
 
             // set kamelet specific properties
             endpoint.setKameletProperties(kameletProperties);
@@ -277,6 +311,13 @@ public class KameletComponent extends DefaultComponent {
     @Override
     protected boolean resolveRawParameterValues() {
         return false;
+    }
+
+    private static Map<String, Object> copyParameters(Map<String, Object> parameters) {
+        // resolveRawParameterValues updates repeated parameters (lists) in place, so copy those too
+        Map<String, Object> answer = new LinkedHashMap<>();
+        parameters.forEach((key, value) -> answer.put(key, value instanceof List<?> list ? new ArrayList<>(list) : value));
+        return answer;
     }
 
     public boolean isNoErrorHandler() {
@@ -365,6 +406,19 @@ public class KameletComponent extends DefaultComponent {
 
     int getStateCounter() {
         return stateCounter;
+    }
+
+    public boolean isAdvancedOptions() {
+        return advancedOptions;
+    }
+
+    /**
+     * Whether to forward extra URI parameters to the endpoint wrapped by the Kamelet. When enabled, parameters that are
+     * not Kamelet template properties or reserved Kamelet options are appended to the wrapped source or sink endpoint.
+     * Disabled by default.
+     */
+    public void setAdvancedOptions(boolean advancedOptions) {
+        this.advancedOptions = advancedOptions;
     }
 
     public void addConsumer(String key, KameletConsumer consumer) {
@@ -474,11 +528,41 @@ public class KameletComponent extends DefaultComponent {
 
         protected void doCreateRouteForEndpoint(KameletEndpoint endpoint, String parentRouteId, String parentProcessorId)
                 throws Exception {
+            final String templateId = endpoint.getTemplateId();
+            final String loc = endpoint.getLocation() != null ? endpoint.getLocation() : getLocation();
+            // creating a Kamelet's route creates the Kamelets its template uses, on this thread: one that is already
+            // being created is a cycle, which created routes until the stack overflowed (CAMEL-25387)
+            Deque<String> creating = CREATING.get();
+            if (creating.contains(templateId)) {
+                List<String> cycle = new ArrayList<>(creating);
+                Collections.reverse(cycle);
+                cycle = cycle.subList(cycle.indexOf(templateId), cycle.size());
+                cycle.add(templateId);
+                String msg = cycle.size() == 2
+                        ? "Kamelet " + templateId + " uses itself: its template uses kamelet:" + templateId
+                          + ", which creates the Kamelet again while creating it. The template of an action or a sink"
+                          + " starts from kamelet:source, the message the route sends to the Kamelet"
+                        : "Kamelets use each other in a cycle: " + String.join(" -> ", cycle)
+                          + ". Creating one creates the next, endlessly";
+                throw new FailedToCreateKameletException(templateId, loc, new IllegalArgumentException(msg));
+            }
+            creating.push(templateId);
+            try {
+                doCreateRouteForEndpoint(endpoint, parentRouteId, parentProcessorId, templateId, loc);
+            } finally {
+                creating.pop();
+                if (creating.isEmpty()) {
+                    CREATING.remove();
+                }
+            }
+        }
+
+        private void doCreateRouteForEndpoint(
+                KameletEndpoint endpoint, String parentRouteId, String parentProcessorId, String templateId, String loc)
+                throws Exception {
 
             final ModelCamelContext context = (ModelCamelContext) getCamelContext();
-            final String templateId = endpoint.getTemplateId();
             final String routeId = endpoint.getRouteId();
-            final String loc = endpoint.getLocation() != null ? endpoint.getLocation() : getLocation();
             final String uuid = (String) endpoint.getKameletProperties().get(PARAM_UUID);
 
             if (context.getRouteTemplateDefinition(templateId) == null && loc != null) {

@@ -53,6 +53,8 @@ a heat map of the route: where messages go, where they fail.
 - **Alt+Up / Alt+Down** — move YAML list block up/down
 - **Ctrl+D** — duplicate current block
 - **Ctrl+K** — delete current line
+- **Ctrl+/** — comment out the current block, or bring it back (`#` in YAML and
+  properties, `//` in Java)
 - **Ctrl+Left / Ctrl+Right** — word navigation
 - **Home** — smart home (content indent, then column 0)
 - Quick documentation panel is shown at the bottom (shows doc for current line;
@@ -173,6 +175,14 @@ a YAML or XML file); **Enter** goes to its declaration.
   EIP type, or label, then press **Enter** to jump directly to the selected
   node in the source editor. Type a **line number** (e.g. `47`) and press
   **Enter** to jump directly to that line.
+
+## Route Tree
+- **Ctrl+T** — show or hide the route tree at the top right of the source:
+  the route the cursor is in, from its `from` through each step, with the
+  branches indented and the step under the cursor marked with ▶. It follows
+  the cursor as you move and edit, for YAML, XML and Java routes, also when
+  the route does not run. The **Route Tree** setting (F2 → Settings) says
+  whether it is shown at first. It needs an editor of 90 columns or more.
 
 ## General
 - **Tab** — toggle focus between file list and source viewer

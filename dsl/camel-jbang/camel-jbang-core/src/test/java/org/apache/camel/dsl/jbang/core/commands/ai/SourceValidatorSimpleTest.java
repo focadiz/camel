@@ -20,6 +20,7 @@ import java.util.List;
 
 import org.apache.camel.catalog.CamelCatalog;
 import org.apache.camel.catalog.DefaultCamelCatalog;
+import org.apache.camel.catalog.LanguageValidationResult;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -256,6 +257,62 @@ class SourceValidatorSimpleTest {
     }
 
     @Test
+    void semanticDependencyDetectionToleratesSurroundingDiagnosticChanges() {
+        CamelCatalog changedDiagnostic = new DefaultCamelCatalog() {
+            @Override
+            public LanguageValidationResult validateLanguageExpression(ClassLoader classLoader, String language, String text) {
+                LanguageValidationResult result = new LanguageValidationResult(text);
+                result.setError("Semantic evaluation requires camel-semantic; add the dependency to use this function");
+                return result;
+            }
+        };
+        List<String> msgs = SourceValidator.validateYamlSimple("""
+                - from:
+                    uri: direct:start
+                    steps:
+                      - setBody:
+                          simple: "${semantic('department')}"
+                """, changedDiagnostic);
+        assertThat(msgs).isEmpty();
+    }
+
+    @Test
+    void semanticExpressionsAndPredicatesDoNotRequireTheRuntimeDependency() {
+        assertThat(catalog.validateLanguageExpression(null, "simple", "${semantic('department')}").getShortError())
+                .contains("requires camel-semantic");
+        List<String> msgs = SourceValidator.validateYamlSimple("""
+                - from:
+                    uri: direct:start
+                    steps:
+                      - setBody:
+                          simple: "${semantic('department')}"
+                      - filter:
+                          simple: "${semantic('allowed')}"
+                          steps:
+                            - log: accepted
+                """, catalog);
+        assertThat(msgs).isEmpty();
+    }
+
+    @Test
+    void invalidSemanticArgumentsAreStillReportedWithoutTheRuntimeDependency() {
+        List<String> msgs = SourceValidator.validateYamlSimple("""
+                - from:
+                    uri: direct:start
+                    steps:
+                      - setBody:
+                          simple: "${semantic(department)}"
+                      - filter:
+                          simple: "${semantic('allowed', 'other')}"
+                          steps:
+                            - log: accepted
+                """, catalog);
+        assertThat(msgs).hasSize(2);
+        assertThat(msgs).allSatisfy(msg -> assertThat(msg)
+                .contains("Simple syntax error", "Semantic requires one quoted evaluation name"));
+    }
+
+    @Test
     void thePredicateEipsComeFromTheCatalog() {
         // the same text is a predicate (error: no ${}) where the catalog marks the option asPredicate, and a
         // literal expression elsewhere
@@ -375,6 +432,37 @@ class SourceValidatorSimpleTest {
                 .contains("Simple has no top-level ternary")
                 .contains("the ? at index 20")
                 .contains("inside one function");
+    }
+
+    @Test
+    void aTopLevelTernaryInAResourceLocationIsReported() {
+        // the location of resource: is a template, so the ? and : outside ${...} are literal text and the route
+        // fails with "Cannot load resource file:2 == 1 ? order.json : order-bad-email.json" (CAMEL-25485)
+        List<String> msgs = SourceValidator.validateYamlSimple("""
+                - from:
+                    uri: timer:tick
+                    steps:
+                      - setBody:
+                          simple: "resource:file:${exchangeProperty.CamelTimerCounter} == 1 ? order.json : order-bad-email.json"
+                """, catalog);
+        assertThat(msgs).hasSize(1);
+        assertThat(msgs.get(0)).startsWith("Line 5:").contains("Simple has no top-level ternary");
+    }
+
+    @Test
+    void aResourceLocationWithoutATopLevelTernaryIsAccepted() {
+        List<String> msgs = SourceValidator.validateYamlSimple(
+                """
+                        - from:
+                            uri: timer:tick
+                            steps:
+                              - setBody:
+                                  simple: "resource:file:${exchangeProperty.CamelTimerCounter == 1 ? 'order.json' : 'order-bad-email.json'}"
+                              - setBody:
+                                  simple: "resource:classpath:script.txt"
+                        """,
+                catalog);
+        assertThat(msgs).isEmpty();
     }
 
     @Test

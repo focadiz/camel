@@ -2308,6 +2308,20 @@ public class EndpointHeaderBuilders {
         return KafkaEndpointBuilderFactory.KafkaHeaderNameBuilder.INSTANCE;
     }
     /**
+     * Kafka Share (camel-kafka-share)
+     * Consume messages from Apache Kafka topics as a queue, using a share
+     * group.
+     * 
+     * Category: messaging
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-kafka-share
+     * 
+     * @return the dsl builder for the headers' name.
+     */
+    public static KafkaShareEndpointBuilderFactory.KafkaShareHeaderNameBuilder kafkaShare() {
+        return KafkaShareEndpointBuilderFactory.KafkaShareHeaderNameBuilder.INSTANCE;
+    }
+    /**
      * Keycloak (camel-keycloak)
      * Manage Keycloak instances via Admin API.
      * 
@@ -3033,6 +3047,19 @@ public class EndpointHeaderBuilders {
      */
     public static OpenAIEndpointBuilderFactory.OpenAIHeaderNameBuilder openai() {
         return OpenAIEndpointBuilderFactory.OpenAIHeaderNameBuilder.INSTANCE;
+    }
+    /**
+     * OpenFeature (camel-openfeature)
+     * Evaluate feature flags using the OpenFeature specification with flagd.
+     * 
+     * Category: cloud
+     * Since: 4.23
+     * Maven coordinates: org.apache.camel:camel-openfeature
+     * 
+     * @return the dsl builder for the headers' name.
+     */
+    public static OpenFeatureEndpointBuilderFactory.OpenFeatureHeaderNameBuilder openfeature() {
+        return OpenFeatureEndpointBuilderFactory.OpenFeatureHeaderNameBuilder.INSTANCE;
     }
     /**
      * OpenFGA (camel-openfga)
@@ -4028,6 +4055,20 @@ public class EndpointHeaderBuilders {
      */
     public static VertxWebsocketEndpointBuilderFactory.VertxWebsocketHeaderNameBuilder vertxWebsocket() {
         return VertxWebsocketEndpointBuilderFactory.VertxWebsocketHeaderNameBuilder.INSTANCE;
+    }
+    /**
+     * Wasm (camel-wasm)
+     * Run Wasm programs (WASI Preview 1 command modules) with the message body
+     * as standard input.
+     * 
+     * Category: core,script
+     * Since: 4.4
+     * Maven coordinates: org.apache.camel:camel-wasm
+     * 
+     * @return the dsl builder for the headers' name.
+     */
+    public static WasmEndpointBuilderFactory.WasmHeaderNameBuilder wasm() {
+        return WasmEndpointBuilderFactory.WasmHeaderNameBuilder.INSTANCE;
     }
     /**
      * Weather (camel-weather)

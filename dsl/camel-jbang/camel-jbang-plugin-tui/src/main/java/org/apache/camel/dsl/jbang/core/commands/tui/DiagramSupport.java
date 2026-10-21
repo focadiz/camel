@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import dev.tamboui.layout.Constraint;
 import dev.tamboui.layout.Layout;
@@ -52,7 +53,9 @@ import dev.tamboui.widgets.scrollbar.Scrollbar;
 import dev.tamboui.widgets.scrollbar.ScrollbarState;
 import org.apache.camel.diagram.RouteDiagramHelper;
 import org.apache.camel.diagram.RouteDiagramLayoutEngine;
+import org.apache.camel.diagram.RouteErrorFrame;
 import org.apache.camel.diagram.TopologyAsciiRenderer;
+import org.apache.camel.diagram.TopologyErrorFrame;
 import org.apache.camel.diagram.TopologyHelper;
 import org.apache.camel.diagram.TopologyLayoutEngine;
 import org.apache.camel.diagram.TopologyLayoutEngine.TopologyEdgeInfo;
@@ -61,10 +64,14 @@ import org.apache.camel.diagram.TopologyLayoutEngine.TopologyLayoutNode;
 import org.apache.camel.diagram.TopologyLayoutEngine.TopologyLayoutResult;
 import org.apache.camel.diagram.TopologyLayoutEngine.TopologyNodeInfo;
 import org.apache.camel.dsl.jbang.core.commands.ai.IntegrationSummary;
+import org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget;
 import org.apache.camel.dsl.jbang.core.commands.tui.diagram.TopologyDiagramWidget;
 import org.apache.camel.util.json.JsonArray;
 import org.apache.camel.util.json.JsonObject;
 
+import static org.apache.camel.dsl.jbang.core.commands.tui.DiagramLayouts.addParentNodes;
+import static org.apache.camel.dsl.jbang.core.commands.tui.DiagramLayouts.normalizeRouteLayoutY;
+import static org.apache.camel.dsl.jbang.core.commands.tui.DiagramLayouts.normalizeTopologyLayoutY;
 import static org.apache.camel.dsl.jbang.core.commands.tui.TuiHelper.*;
 import static org.apache.camel.dsl.jbang.core.commands.tui.TuiHelper.hint;
 
@@ -78,6 +85,8 @@ class DiagramSupport {
     private boolean showDiagram;
     private boolean topologyMode;
     private boolean showDescription;
+    /** The body types each step has been reached with, beside the arrows of the route diagram (CAMEL-25750). */
+    private boolean showBodyTypes;
     private Path aiSourceDirectory;
     /** The AI labels of the decision points of the routes shown, by their node (CAMEL-25161). */
     private volatile Map<String, IntegrationSummary.StepLabel> stepLabels = Map.of();
@@ -92,6 +101,16 @@ class DiagramSupport {
     /** Routes left out of the topology (the utility routes when hidden), and what the current layout was made for. */
     private volatile Set<String> hiddenRouteIds = Set.of();
     private Set<String> layoutHidden = Set.of();
+    // the error handling drawn in a frame of its own below the routes (x); off shows the happy path only
+    private volatile boolean showErrorPaths;
+    private boolean layoutShowErrorPaths;
+    private TopologyErrorFrame errorLayer;
+    // the error handling of each route, in a frame below its happy path, when shown (x)
+    private Map<String, RouteErrorFrame> routeErrorFrames = Map.of();
+    // the error paths of the topology, shown or not (an agent sees them in tui_get_topology)
+    private List<TopologyErrorFrame.ErrorPath> errorPaths = List.of();
+    // whether the integration reports error paths: its Camel is 4.23 or newer (older ones report calls only)
+    private boolean errorPathsKnown = true;
     private int layoutBoxColumns = DEFAULT_BOX_COLUMNS;
     private int scrollY;
     private int scrollX;
@@ -154,6 +173,14 @@ class DiagramSupport {
 
     void setShowDescription(boolean showDescription) {
         this.showDescription = showDescription;
+    }
+
+    boolean isShowBodyTypes() {
+        return showBodyTypes;
+    }
+
+    void setShowBodyTypes(boolean showBodyTypes) {
+        this.showBodyTypes = showBodyTypes;
     }
 
     List<TopologyAsciiRenderer.NodeBox> getNodeBoxes() {
@@ -275,6 +302,24 @@ class DiagramSupport {
             edgesArr.add(e);
         }
         result.put("edges", edgesArr);
+
+        // the error paths, shown in the diagram or not (x): sent to only when a route handles a failure
+        JsonArray errorArr = new JsonArray();
+        for (TopologyErrorFrame.ErrorPath p : errorPaths) {
+            JsonObject e = new JsonObject();
+            e.put("from", p.fromRouteId());
+            e.put("to", p.toRouteId());
+            e.put("via", p.via());
+            if (p.handling() != null) {
+                e.put("handling", p.handling());
+            }
+            errorArr.add(e);
+        }
+        result.put("errorPaths", errorArr);
+        result.put("errorsShown", layoutShowErrorPaths && errorLayer != null);
+        if (!errorPathsKnown) {
+            result.put("errorPathsNote", "the integration runs a Camel before 4.23, which does not report error paths");
+        }
 
         result.put("totalNodes", layout.nodes.size());
         result.put("totalEdges", layout.edges.size());
@@ -902,7 +947,43 @@ class DiagramSupport {
 
     /** Whether the topology was laid out for other hidden routes or another box width, and needs a new load. */
     boolean isTopologyStale() {
-        return !hiddenRouteIds.equals(layoutHidden) || wantedBoxColumns() != layoutBoxColumns;
+        return !hiddenRouteIds.equals(layoutHidden) || wantedBoxColumns() != layoutBoxColumns
+                || showErrorPaths != layoutShowErrorPaths;
+    }
+
+    boolean isShowErrorPaths() {
+        return showErrorPaths;
+    }
+
+    void setShowErrorPaths(boolean show) {
+        this.showErrorPaths = show;
+    }
+
+    /** The routes with error handling (that send somewhere when they handle a failure), for the mark on their box. */
+    Set<String> errorMarkRouteIds() {
+        Set<String> answer = new HashSet<>();
+        for (TopologyErrorFrame.ErrorPath p : errorPaths) {
+            answer.add(p.fromRouteId());
+        }
+        return answer;
+    }
+
+    /** The error paths of the topology last loaded, whether shown or not. */
+    List<TopologyErrorFrame.ErrorPath> getErrorPaths() {
+        return errorPaths;
+    }
+
+    /** Whether the integration reports error paths: Camel 4.23 or newer. */
+    boolean isErrorPathsKnown() {
+        return errorPathsKnown;
+    }
+
+    /** The error frame of a route in the route view: its onException blocks, where its failures go and come from. */
+    private static RouteErrorFrame errorFrame(
+            RouteDiagramLayoutEngine engine, RouteDiagramLayoutEngine.LayoutRoute lr,
+            List<RouteDiagramLayoutEngine.RouteInfo> blocks, String routeId, List<TopologyErrorFrame.ErrorPath> paths) {
+        return RouteErrorFrame.add(engine, lr, blocks,
+                RouteErrorFrame.lines(routeId, paths, TopologyErrorFrame.LineStyle.UNICODE), TopologyAsciiRenderer.ROW_HEIGHT);
     }
 
     /** Leaves out the hidden routes, the links to and from them, and external systems only they used. */
@@ -918,6 +999,28 @@ class DiagramSupport {
             linked.add(e.toRouteId);
         }
         nodes.removeIf(n -> n.nodeType != null && n.nodeType.startsWith("external") && !linked.contains(n.routeId));
+    }
+
+    /**
+     * The routes to highlight: those of a capability in focus, or, when a route of the error frame is selected, the
+     * routes whose error handling sends to it.
+     */
+    private Set<String> highlightRouteIds() {
+        if (!focusRouteIds.isEmpty() || !layoutShowErrorPaths || errorLayer == null) {
+            return focusRouteIds;
+        }
+        String selected = getSelectedRouteId();
+        if (selected == null || !errorLayer.routeIds().contains(selected)) {
+            return focusRouteIds;
+        }
+        Set<String> answer = new HashSet<>();
+        answer.add(selected);
+        for (TopologyErrorFrame.ErrorPath p : errorLayer.paths()) {
+            if (selected.equals(p.toRouteId())) {
+                answer.add(p.fromRouteId());
+            }
+        }
+        return answer;
     }
 
     /** Highlights routes in the topology (the routes of a capability); null clears it. */
@@ -992,10 +1095,12 @@ class DiagramSupport {
 
         var widget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.TopologyDiagramWidget(
                 topologyLayout, topologyNodeWidth, selectedNodeIndex, scrollX, scrollY, metrics, showDescription,
-                focusRouteIds, false)
+                highlightRouteIds(), false)
                 .withAiDescriptions(aiDescriptions(), Theme.aiAssisted())
                 .withNodeLines(nodeLines)
-                .withGroups(groupTags, groupColors);
+                .withGroups(groupTags, groupColors)
+                .withErrorLayer(layoutShowErrorPaths ? errorLayer : null)
+                .withErrorMarks(errorMarkRouteIds());
 
         int totalRows = widget.getTotalRows();
         int totalCols = widget.getTotalCols();
@@ -1012,10 +1117,12 @@ class DiagramSupport {
         // Re-create widget with clamped scroll
         var finalWidget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.TopologyDiagramWidget(
                 topologyLayout, topologyNodeWidth, selectedNodeIndex, scrollX, scrollY, metrics, showDescription,
-                focusRouteIds, false)
+                highlightRouteIds(), false)
                 .withAiDescriptions(aiDescriptions(), Theme.aiAssisted())
                 .withNodeLines(nodeLines)
-                .withGroups(groupTags, groupColors);
+                .withGroups(groupTags, groupColors)
+                .withErrorLayer(layoutShowErrorPaths ? errorLayer : null)
+                .withErrorMarks(errorMarkRouteIds());
 
         List<Rect> vChunks = Layout.vertical()
                 .constraints(Constraint.fill(), Constraint.length(1))
@@ -1103,11 +1210,11 @@ class DiagramSupport {
 
     // ---- Route EIP node selection ----
 
-    private List<org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget.EipNodeBox> eipNodeBoxes
+    private List<RouteDiagramWidget.EipNodeBox> eipNodeBoxes
             = Collections.emptyList();
     private int selectedEipNodeIndex = -1;
 
-    List<org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget.EipNodeBox> getEipNodeBoxes() {
+    List<RouteDiagramWidget.EipNodeBox> getEipNodeBoxes() {
         return eipNodeBoxes;
     }
 
@@ -1123,7 +1230,7 @@ class DiagramSupport {
         selectedEipNodeIndex = 0;
     }
 
-    org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget.EipNodeBox getSelectedEipNodeBox() {
+    RouteDiagramWidget.EipNodeBox getSelectedEipNodeBox() {
         if (selectedEipNodeIndex >= 0 && selectedEipNodeIndex < eipNodeBoxes.size()) {
             return eipNodeBoxes.get(selectedEipNodeIndex);
         }
@@ -1195,23 +1302,14 @@ class DiagramSupport {
             if (currentRouteId.equals(entry.getKey())) {
                 continue;
             }
-            if ("from".equals(type) ? sendsTo(entry.getValue(), baseUri) : baseUri.equals(findFromUri(entry.getValue()))) {
+            RouteErrorFrame frame = layoutShowErrorPaths ? routeErrorFrames.get(entry.getKey()) : null;
+            if ("from".equals(type)
+                    ? RouteLinks.sendsTo(entry.getValue(), baseUri, frame)
+                    : baseUri.equals(RouteLinks.fromUri(entry.getValue()))) {
                 return entry.getKey();
             }
         }
         return null;
-    }
-
-    /** Whether a route sends to the endpoint: a to, toD, wireTap or enrich of that base uri. */
-    private static boolean sendsTo(RouteDiagramLayoutEngine.LayoutRoute lr, String baseUri) {
-        for (var node : lr.nodes) {
-            if (node.treeNode != null && ("to".equals(node.type) || "toD".equals(node.type)
-                    || "case".equals(node.type) || "wireTap".equals(node.type) || "enrich".equals(node.type))
-                    && baseUri.equals(getBaseUri(node.treeNode.info))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String resolveThrough(String nodeId, String excludeRouteId) {
@@ -1393,36 +1491,7 @@ class DiagramSupport {
      * Computes a mapping from base endpoint URI to target route ID for navigable links from the current route.
      */
     private Map<String, String> computeLinkableEndpoints(String currentRouteId) {
-        Map<String, String> endpoints = new HashMap<>();
-        String currentFromUri = null;
-        var currentLayout = routeLayouts.get(currentRouteId);
-        if (currentLayout != null) {
-            currentFromUri = findFromUri(currentLayout);
-        }
-
-        for (var entry : routeLayouts.entrySet()) {
-            if (currentRouteId.equals(entry.getKey())) {
-                continue;
-            }
-            var lr = entry.getValue();
-            String fromUri = findFromUri(lr);
-            if (fromUri != null) {
-                endpoints.put(fromUri, entry.getKey());
-            }
-            if (currentFromUri != null) {
-                for (var node : lr.nodes) {
-                    String type = node.type;
-                    if (("to".equals(type) || "toD".equals(type) || "case".equals(type) || "wireTap".equals(type))
-                            && node.treeNode != null) {
-                        String uri = getBaseUri(node.treeNode.info);
-                        if (currentFromUri.equals(uri)) {
-                            endpoints.put(currentFromUri, entry.getKey());
-                        }
-                    }
-                }
-            }
-        }
-        return endpoints;
+        return RouteLinks.linkable(currentRouteId, routeLayouts, layoutShowErrorPaths ? routeErrorFrames : Map.of());
     }
 
     private Map<String, String> computeRouteDescriptions() {
@@ -1464,15 +1533,6 @@ class DiagramSupport {
         return uris;
     }
 
-    private static String findFromUri(RouteDiagramLayoutEngine.LayoutRoute lr) {
-        for (var node : lr.nodes) {
-            if ("from".equals(node.type) && node.treeNode != null) {
-                return getBaseUri(node.treeNode.info);
-            }
-        }
-        return null;
-    }
-
     void renderNativeRouteDiagram(
             Frame frame, Rect area, Line title, boolean metrics,
             String currentRouteId, RouteDiagramLayoutEngine.LayoutRoute routeLayout) {
@@ -1487,9 +1547,14 @@ class DiagramSupport {
         Map<String, String> linkable = computeLinkableEndpoints(currentRouteId);
         Map<String, String> routeDescs = showDescription ? computeRouteDescriptions() : Collections.emptyMap();
 
-        var widget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget(
+        // built again once the scroll is clamped to its size
+        Supplier<RouteDiagramWidget> widgets = () -> new RouteDiagramWidget(
                 routeLayout, nw, selectedEipNodeIndex, scrollX, scrollY, metrics, linkable,
-                showDescription, routeDescs);
+                showDescription, routeDescs)
+                .withErrorFrame(layoutShowErrorPaths ? routeErrorFrames.get(currentRouteId) : null)
+                .withErrorMark(errorMarkRouteIds().contains(currentRouteId))
+                .withBodyTypes(showBodyTypes).withBodyKindMarks(true);
+        var widget = widgets.get();
 
         int totalRows = widget.getTotalRows();
         int totalCols = widget.getTotalCols();
@@ -1503,9 +1568,7 @@ class DiagramSupport {
         scrollY = Math.min(scrollY, maxVScroll);
         scrollX = Math.min(scrollX, maxHScroll);
 
-        var finalWidget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget(
-                routeLayout, nw, selectedEipNodeIndex, scrollX, scrollY, metrics, linkable,
-                showDescription, routeDescs);
+        var finalWidget = widgets.get();
 
         List<Rect> vChunks = Layout.vertical()
                 .constraints(Constraint.fill(), Constraint.length(1))
@@ -1592,8 +1655,8 @@ class DiagramSupport {
     void loadHighlightedNativeDiagramInBackground(
             MonitorContext ctx, String pid,
             String[] messageHistory, boolean failed, int initialStepIndex) {
-        // Single IPC call: topology + route structures
-        JsonObject jo = requestRouteTopology(ctx, pid, false, true);
+        // the topology and the structure of the routes, with the numbers of the status file
+        JsonObject jo = ctx.diagramTopology.load(ctx, pid);
         if (jo == null) {
             close();
             return;
@@ -1938,7 +2001,9 @@ class DiagramSupport {
                 false, showDescription, historyRouteIds, historyFailed)
                 .withAiDescriptions(aiDescriptions(), Theme.aiAssisted())
                 .withNodeLines(nodeLines)
-                .withGroups(groupTags, groupColors);
+                .withGroups(groupTags, groupColors)
+                .withErrorLayer(layoutShowErrorPaths ? errorLayer : null)
+                .withErrorMarks(errorMarkRouteIds());
 
         int totalRows = widget.getTotalRows();
         int totalCols = widget.getTotalCols();
@@ -1957,7 +2022,9 @@ class DiagramSupport {
                 false, showDescription, historyRouteIds, historyFailed)
                 .withAiDescriptions(aiDescriptions(), Theme.aiAssisted())
                 .withNodeLines(nodeLines)
-                .withGroups(groupTags, groupColors);
+                .withGroups(groupTags, groupColors)
+                .withErrorLayer(layoutShowErrorPaths ? errorLayer : null)
+                .withErrorMarks(errorMarkRouteIds());
 
         List<Rect> vChunks = Layout.vertical()
                 .constraints(Constraint.fill(), Constraint.length(1))
@@ -2052,7 +2119,7 @@ class DiagramSupport {
         Map<String, String> linkable = computeLinkableEndpoints(routeId);
         Map<String, String> routeDescs = showDescription ? computeRouteDescriptions() : Collections.emptyMap();
 
-        var widget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget(
+        var widget = new RouteDiagramWidget(
                 routeLayout, nw, selIdx, scrollX, scrollY, false, linkable,
                 showDescription, routeDescs, activeHighlight, historyFailed);
 
@@ -2083,7 +2150,7 @@ class DiagramSupport {
             }
         }
 
-        var finalWidget = new org.apache.camel.dsl.jbang.core.commands.tui.diagram.RouteDiagramWidget(
+        var finalWidget = new RouteDiagramWidget(
                 routeLayout, nw, selIdx, scrollX, scrollY, false, linkable,
                 showDescription, routeDescs, activeHighlight, historyFailed);
 
@@ -2127,37 +2194,72 @@ class DiagramSupport {
 
     void loadAllDiagramsInBackground(
             MonitorContext ctx, String pid, boolean metrics, int externalMode) {
-        // Single IPC call: topology + route structures
         boolean external = externalMode > 0;
         Set<String> hidden = hiddenRouteIds;
         int boxColumns = wantedBoxColumns();
-        JsonObject topoJson = requestRouteTopology(ctx, pid, external, true);
+        // the topology and the structure of the routes, with the numbers of the status file
+        JsonObject topoJson = ctx.diagramTopology.load(ctx, pid);
 
         TopologyLayoutResult topoResult = null;
         int nodeW = 0;
         List<TopologyLayoutNode> topoNodes = Collections.emptyList();
         List<TopologyLayoutEdge> topoEdges = Collections.emptyList();
 
+        boolean showErrors = showErrorPaths;
+        List<TopologyErrorFrame.ErrorPath> loadedErrorPaths = List.of();
+        TopologyErrorFrame loadedErrorLayer = null;
+        boolean loadedErrorPathsKnown = true;
         if (topoJson != null) {
             List<TopologyNodeInfo> nodes = TopologyHelper.parseNodes(topoJson);
-            List<TopologyEdgeInfo> edges = TopologyHelper.parseEdges(topoJson);
+            List<TopologyEdgeInfo> all = TopologyHelper.parseEdges(topoJson, true);
+            List<TopologyEdgeInfo> edges = new ArrayList<>(all.stream().filter(e -> !e.isErrorPath()).toList());
+            List<TopologyEdgeInfo> errors = all.stream().filter(TopologyEdgeInfo::isErrorPath).toList();
+            // a Camel before 4.23 says no kind of edge: it reports calls only
+            JsonArray rawEdges = topoJson.getCollection("edges");
+            loadedErrorPathsKnown = rawEdges == null || rawEdges.isEmpty()
+                    || rawEdges.stream().anyMatch(o -> o instanceof JsonObject jo && jo.containsKey("kind"));
+            Set<String> errorOnly = TopologyErrorFrame.errorOnlyRoutes(edges, errors);
+            loadedErrorPaths = errors.stream()
+                    .filter(e -> !hidden.contains(e.fromRouteId) || errorOnly.contains(e.fromRouteId))
+                    .map(e -> new TopologyErrorFrame.ErrorPath(e.fromRouteId, e.toRouteId, e.via, e.handling))
+                    .distinct().toList();
             if (external) {
                 TopologyHelper.addExternalEndpoints(nodes, edges, topoJson);
             }
             if (externalMode == 2) {
                 TopologyHelper.expandExternalEdges(nodes, edges);
             }
+            // shown, the routes reached only on error are in the frame (whether utility routes are shown or not)
+            TopologyErrorFrame.Taken frameRoutes = showErrors
+                    ? TopologyErrorFrame.take(nodes, edges, errorOnly)
+                    : new TopologyErrorFrame.Taken(List.of(), TopologyErrorFrame.Externals.NONE);
+            List<TopologyNodeInfo> errorNodes = frameRoutes.routes();
             removeRoutes(nodes, edges, hidden);
             if (!nodes.isEmpty()) {
                 TopologyLayoutEngine engine = engineFor(boxColumns);
                 topoResult = engine.layout(nodes, edges);
                 normalizeTopologyLayoutY(topoResult);
                 nodeW = engine.getNodeWidth();
+            }
+            if (showErrors && !errorNodes.isEmpty()) {
+                TopologyLayoutEngine engine = engineFor(boxColumns);
+                if (topoResult == null) {
+                    topoResult = new TopologyLayoutResult(new ArrayList<>(), new ArrayList<>(), 0, 0);
+                    nodeW = engine.getNodeWidth();
+                }
+                TopologyErrorFrame.Placed placed = TopologyErrorFrame.place(
+                        topoResult, errorNodes, frameRoutes.externals(), loadedErrorPaths, nodeW, engine.getNodeHeight(),
+                        TopologyAsciiRenderer.ROW_HEIGHT);
+                topoResult = placed.layout();
+                loadedErrorLayer = placed.frame();
+            }
+            if (topoResult != null) {
                 topoNodes = topoResult.nodes;
                 topoEdges = topoResult.edges;
             }
         }
 
+        Map<String, RouteErrorFrame> loadedRouteFrames = new java.util.HashMap<>();
         // Route structure is included in the topology response (routes=true)
         java.util.Map<String, RouteDiagramLayoutEngine.LayoutRoute> routeMap = new java.util.LinkedHashMap<>();
         if (topoJson != null) {
@@ -2189,8 +2291,16 @@ class DiagramSupport {
                         labelMode);
                 engine.setTableLayout(true);
                 for (RouteDiagramLayoutEngine.RouteInfo r : routes) {
-                    RouteDiagramLayoutEngine.LayoutRoute lr = engine.layoutRoute(r, 0);
+                    // the happy path; the onException clauses are not its steps, and are shown in the error frame
+                    RouteErrorFrame.Split split = RouteErrorFrame.split(r);
+                    RouteDiagramLayoutEngine.LayoutRoute lr = engine.layoutRoute(split.happy(), 0);
                     normalizeRouteLayoutY(lr);
+                    if (showErrors) {
+                        RouteErrorFrame frame = errorFrame(engine, lr, split.blocks(), r.routeId, loadedErrorPaths);
+                        if (frame != null) {
+                            loadedRouteFrames.put(r.routeId, frame);
+                        }
+                    }
                     routeMap.put(r.routeId, lr);
                 }
             }
@@ -2205,9 +2315,17 @@ class DiagramSupport {
         if (ctx.runner == null) {
             return;
         }
+        List<TopologyErrorFrame.ErrorPath> finalErrorPaths = loadedErrorPaths;
+        TopologyErrorFrame finalErrorLayer = loadedErrorLayer;
+        boolean finalErrorPathsKnown = loadedErrorPathsKnown;
         ctx.runner.runOnRenderThread(() -> {
             layoutHidden = hidden;
             layoutBoxColumns = boxColumns;
+            layoutShowErrorPaths = showErrors;
+            errorPaths = finalErrorPaths;
+            errorLayer = finalErrorLayer;
+            routeErrorFrames = loadedRouteFrames;
+            errorPathsKnown = finalErrorPathsKnown;
             if (!showDiagram && !preloading) {
                 return;
             }
@@ -2247,87 +2365,6 @@ class DiagramSupport {
                 }
             }
         });
-    }
-
-    private JsonObject requestRouteTopology(MonitorContext ctx, String pid, boolean external, boolean routes) {
-        JsonObject root = new JsonObject();
-        root.put("action", "route-topology");
-        root.put("metric", "true");
-        root.put("external", "true");
-        if (routes) {
-            root.put("routes", "true");
-        }
-        return ctx.executeAction(pid, root, 5000);
-    }
-
-    private JsonObject requestRouteStructure(MonitorContext ctx, String pid) {
-        JsonObject root = new JsonObject();
-        root.put("action", "route-structure");
-        root.put("filter", "*");
-        root.put("brief", false);
-        root.put("metric", true);
-        return ctx.executeAction(pid, root, 5000);
-    }
-
-    static void addParentNodes(List<RouteDiagramLayoutEngine.NodeInfo> nodes, Set<String> nodeIds) {
-        for (int i = 0; i < nodes.size(); i++) {
-            RouteDiagramLayoutEngine.NodeInfo node = nodes.get(i);
-            if (node.id == null || nodeIds.contains(node.id)) {
-                continue;
-            }
-            boolean hasHighlightedChild = false;
-            for (int j = i + 1; j < nodes.size(); j++) {
-                RouteDiagramLayoutEngine.NodeInfo child = nodes.get(j);
-                if (child.level <= node.level) {
-                    break;
-                }
-                if (child.id != null && nodeIds.contains(child.id)) {
-                    hasHighlightedChild = true;
-                    break;
-                }
-            }
-            if (hasHighlightedChild) {
-                nodeIds.add(node.id);
-            }
-        }
-    }
-
-    private static void normalizeTopologyLayoutY(TopologyLayoutResult result) {
-        if (result.nodes.isEmpty()) {
-            return;
-        }
-        int minY = Integer.MAX_VALUE;
-        for (TopologyLayoutNode node : result.nodes) {
-            minY = Math.min(minY, node.y);
-        }
-        if (minY <= 0) {
-            return;
-        }
-        int shift = minY - 40;
-        for (TopologyLayoutNode node : result.nodes) {
-            node.y -= shift;
-        }
-    }
-
-    private static void normalizeRouteLayoutY(RouteDiagramLayoutEngine.LayoutRoute lr) {
-        int minY = Integer.MAX_VALUE;
-        for (RouteDiagramLayoutEngine.LayoutNode ln : lr.nodes) {
-            if (!"route".equals(ln.type)) {
-                minY = Math.min(minY, ln.y);
-            }
-        }
-        if (minY <= 0 || minY == Integer.MAX_VALUE) {
-            return;
-        }
-        int shift = minY - 40;
-        for (RouteDiagramLayoutEngine.LayoutNode ln : lr.nodes) {
-            ln.y -= shift;
-            if (ln.connectFromMerge) {
-                ln.mergeY -= shift;
-            }
-        }
-        lr.labelY -= shift;
-        lr.maxY -= shift;
     }
 
     /**
